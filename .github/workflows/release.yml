@@ -1,0 +1,405 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # Dry runs. Everything except the GitHub Release itself happens, so the seven
+  # native builds can be exercised without cutting a version.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - id: v
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-ci.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    # A tag must not produce binaries the test suite has not signed off on.
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - run: dotnet test maxdop.slnx -c Release --nologo
+
+  build:
+    name: ${{ matrix.rid }}
+    needs: [version, test]
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # NativeAOT does not cross-compile between operating systems, and the
+          # arm64 legs are native rather than cross-compiled for the same reason
+          # in miniature: cross-arch AOT needs a target rootfs and a cross linker,
+          # which is a second toolchain to keep honest. GitHub's arm64 runners
+          # remove the need. If those runner labels are unavailable on this
+          # account, the fix is to drop the leg, not to fake it from x64.
+          #
+          # The glibc legs build inside Rocky 8 because the linker binds each
+          # imported symbol to the *builder's* glibc version. Measured on a
+          # Debian 12 host (glibc 2.36) the binary demanded glibc ≥ 2.34 — every
+          # pthread symbol, because 2.34 is where libpthread was folded into
+          # libc — which excludes RHEL 8, Ubuntu 20.04 and Amazon Linux 2. The
+          # same source built on Rocky 8 (glibc 2.28) asks only for 2.17. The
+          # runner image is therefore part of the compatibility contract, not an
+          # implementation detail.
+          - { rid: linux-x64,      os: ubuntu-24.04,     container: 'quay.io/rockylinux/rockylinux:8' }
+          - { rid: linux-arm64,    os: ubuntu-24.04-arm, container: 'quay.io/rockylinux/rockylinux:8' }
+          - { rid: linux-musl-x64, os: ubuntu-24.04, musl: true }
+          - { rid: win-x64,        os: windows-latest }
+          - { rid: win-arm64,      os: windows-11-arm }
+          # macos-13 was retired in December 2025 and its label now matches no
+          # runner at all: the job sat queued forever rather than failing, which
+          # is the worst way for a release to break. `macos-15-intel` is the
+          # replacement and the *last* x86_64 macOS image GitHub will offer —
+          # it goes away in August 2027, after which osx-x64 has no builder and
+          # this leg has to be dropped or moved to a self-hosted Intel Mac.
+          - { rid: osx-x64,        os: macos-15-intel }
+          - { rid: osx-arm64,      os: macos-14 }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - name: Install container prerequisites
+        if: ${{ matrix.container }}
+        # Before checkout: a minimal Rocky image has no git (checkout would
+        # silently fall back to a tarball download), no findutils (the .NET
+        # install script fails its own post-install verification without it,
+        # after a 235 MB download), and no binutils for the floor measurement
+        # below. Running as root in the container, so no sudo.
+        run: dnf install --assumeyes --quiet git clang zlib-devel libicu findutils tar binutils
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/dotnet
+        if: ${{ !matrix.musl }}
+
+      - name: Publish
+        if: ${{ !matrix.musl }}
+        shell: bash
+        run: |
+          dotnet publish src/Maxdop.Cli/Maxdop.Cli.csproj -c Release -r "$RID" \
+            -p:PublishAot=true \
+            -p:Version="$VERSION" \
+            -p:ContinuousIntegrationBuild=true \
+            -o publish
+
+      - name: Publish (musl, in an Alpine container)
+        if: ${{ matrix.musl }}
+        run: |
+          # Alpine gets a container rather than the pinned-SDK action: the SDK
+          # pin installs a glibc build, so the musl leg has to take its SDK from
+          # a musl image. That makes it the one place CI can drift from
+          # mise.toml — the container tag is the pin, and moves when the repo's
+          # major does.
+          docker run --rm -v "$PWD:/src" -w /src \
+            -e VERSION="$VERSION" \
+            mcr.microsoft.com/dotnet/sdk:10.0-alpine sh -euc '
+              apk add --no-cache clang build-base zlib-dev
+              dotnet publish src/Maxdop.Cli/Maxdop.Cli.csproj -c Release -r linux-musl-x64 \
+                -p:PublishAot=true \
+                -p:Version="$VERSION" \
+                -p:ContinuousIntegrationBuild=true \
+                -o publish
+              ./publish/maxdop --version
+              ./publish/maxdop --write tests/corpus/select.sql
+              ./publish/maxdop --check tests/corpus/select.sql
+            '
+          sudo chown -R "$(id -u):$(id -g)" publish
+
+      - name: Smoke test
+        if: ${{ !matrix.musl }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RID" == win-* ]]; then bin=publish/maxdop.exe; else bin=publish/maxdop; fi
+          "$bin" --version
+          "$bin" --write tests/corpus/select.sql
+          "$bin" --check tests/corpus/select.sql
+
+      - name: Report the glibc floor
+        if: ${{ startsWith(matrix.rid, 'linux-') && !matrix.musl }}
+        run: |
+          # The builder image is chosen for this number, so assert it rather than
+          # print it: if a future image bump quietly raises the floor past
+          # RHEL 8's 2.28, the release fails here instead of failing in a user's
+          # terminal with "GLIBC_2.34 not found". 2.17 is what Rocky 8 currently
+          # produces; the ceiling is deliberately the promise, not the reading.
+          set -euo pipefail
+          floor="$(readelf --dyn-syms -W publish/maxdop \
+            | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1)"
+          echo "### \`$RID\` requires glibc ≥ ${floor:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(printf '%s\n2.28\n' "$floor" | sort -V | tail -1)" != "2.28" ]; then
+            echo "::error::glibc floor $floor exceeds the 2.28 (RHEL 8) promise"
+            exit 1
+          fi
+          echo "glibc floor: $floor (≤ 2.28, RHEL 8 and Ubuntu 20.04 covered)"
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="maxdop-$VERSION-$RID"
+          mkdir -p "staging/$name" dist
+          cp LICENSE README.md "staging/$name/"
+          if [[ "$RID" == win-* ]]; then
+            cp publish/maxdop.exe "staging/$name/"
+            (cd staging && 7z a -tzip -mx=9 "../dist/$name.zip" "$name" >/dev/null)
+          else
+            cp publish/maxdop "staging/$name/"
+            chmod +x "staging/$name/maxdop"
+            tar -czf "dist/$name.tar.gz" -C staging "$name"
+          fi
+
+          # macOS ships shasum, not sha256sum; the checksum file is the same
+          # format either way so `sha256sum -c` can verify the lot.
+          cd dist
+          for f in *; do
+            if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256"
+            else shasum -a 256 "$f" > "$f.sha256"; fi
+          done
+          cat ./*.sha256
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: maxdop-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  vsix:
+    # One VSIX per platform, each carrying the binary for that platform only.
+    # VS Code downloads the matching one, so nothing is fetched on first
+    # activation — the classic formatter-extension failure is a first-run
+    # download that dies behind a corporate proxy.
+    #
+    # This job needs no cross-compilation: it unpacks the archives the matrix
+    # already produced and rezips them, so the bytes a user gets from the
+    # Marketplace are the same bytes as the release archive, not a rebuild.
+    name: vsix
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/node
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: archives
+          pattern: maxdop-*
+          merge-multiple: true
+
+      - name: Build the extension
+        working-directory: editors/vscode
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Package one VSIX per platform
+        working-directory: editors/vscode
+        run: |
+          set -euo pipefail
+
+          # The Marketplace accepts only x.y.z, so a dispatch run's
+          # "0.0.0-ci.N" and any pre-release tag are trimmed to their release
+          # part. These VSIXs are artifacts for inspection, not publications.
+          # The publisher id is also the first half of the `editor.defaultFormatter` this
+          # extension sets for .sql files. Shipping the placeholder produces an extension
+          # that installs and then formats nothing, pointing at a publisher that does not
+          # exist, and says so nowhere. Cheaper to fail here than to unpublish a listing.
+          if grep -q PLACEHOLDER package.json; then
+            echo "::error::package.json still has a placeholder publisher id"
+            exit 1
+          fi
+
+          extension_version="${VERSION%%-*}"
+          npm pkg set "version=$extension_version"
+
+          # This README is the Marketplace listing, and its screenshot is an absolute URL
+          # pinned to a tag — the Marketplace renders it outside the repo, so a relative
+          # path has nothing to resolve against. Stamping the version without the pin
+          # publishes a listing whose image 404s until someone happens to look at it. Both
+          # come from the tag instead, so they cannot disagree. grep, because a sed that
+          # silently matches nothing is the failure this is here to prevent.
+          sed -i "s|/maxdop/v[0-9][0-9.]*/|/maxdop/v$extension_version/|g" README.md
+          grep -q "/maxdop/v$extension_version/" README.md
+
+          archives="$GITHUB_WORKSPACE/archives"
+          out="$GITHUB_WORKSPACE/vsix"
+          # Outside the extension directory, deliberately. Extracting here put
+          # every previously-processed platform's binary inside the next VSIX:
+          # 21 MB and 14 MB packages instead of 6.9 MB, silently, because vsce
+          # packages whatever it finds that .vscodeignore does not exclude.
+          staging="$RUNNER_TEMP/staging"
+          mkdir -p "$out" "$staging"
+
+          # vsce target : .NET RID : archive kind
+          for entry in \
+            win32-x64:win-x64:zip \
+            win32-arm64:win-arm64:zip \
+            linux-x64:linux-x64:tar \
+            linux-arm64:linux-arm64:tar \
+            alpine-x64:linux-musl-x64:tar \
+            darwin-x64:osx-x64:tar \
+            darwin-arm64:osx-arm64:tar
+          do
+            target="${entry%%:*}"
+            rest="${entry#*:}"
+            rid="${rest%%:*}"
+            kind="${rest##*:}"
+            name="maxdop-$VERSION-$rid"
+
+            if [ "$kind" = zip ]; then
+              unzip -q -o "$archives/$name.zip" -d "$staging"
+              binary="$staging/$name/maxdop.exe"
+            else
+              tar -xzf "$archives/$name.tar.gz" -C "$staging"
+              binary="$staging/$name/maxdop"
+            fi
+
+            node scripts/publish-cli.mjs --target "$target" --binary "$binary"
+            npx vsce package --target "$target" --out "$out/maxdop-$VERSION-$target.vsix"
+
+            # A platform VSIX is one ~18 MB binary compressed, so ~7 MB. Anything
+            # far above that means files got swept in that should not have been —
+            # the failure that produced 21 MB packages once already, and which
+            # nothing else would notice until a user downloaded one.
+            size="$(stat -c%s "$out/maxdop-$VERSION-$target.vsix")"
+            if [ "$size" -gt $((12 * 1024 * 1024)) ]; then
+              echo "::error::$target VSIX is $((size / 1024 / 1024)) MB — something extra was packaged"
+              exit 1
+            fi
+          done
+
+          cd "$out"
+          for f in *.vsix; do sha256sum "$f" > "$f.sha256"; done
+          ls -lh
+          cat ./*.sha256
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: maxdop-vsix
+          path: vsix/*
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: [version, build, vsix]
+    if: ${{ needs.version.outputs.release == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # For the provenance attestation below: an OIDC token to prove which workflow is asking, and
+      # permission to record the answer.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: dist
+          pattern: maxdop-*
+          merge-multiple: true
+
+      - name: Collect checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          cat ./*.sha256 | sort -k2 > SHA256SUMS
+          rm ./*.sha256
+          sha256sum -c SHA256SUMS
+          cat SHA256SUMS
+
+      # Signs every artifact with a short-lived certificate tied to this repository, this workflow
+      # and this commit, and records it in a public transparency log. Nobody holds a key that could
+      # leak, because none is kept.
+      #
+      # This is not the same thing as Authenticode or an Apple Developer ID: it does not quieten
+      # SmartScreen or Gatekeeper, which want a paid identity from a CA that maxdop does not have. It
+      # answers the different question — "did these bytes come out of this repository's release
+      # workflow, unmodified" — which is the one an enterprise reviewer asks, and the one SHA256SUMS
+      # alone cannot answer, since whoever replaced the binaries could rewrite the checksums too.
+      #
+      #   gh attestation verify maxdop-linux-x64.tar.gz --repo ${{ github.repository }}
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.vsix
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "maxdop ${{ needs.version.outputs.version }}" \
+            --generate-notes \
+            --verify-tag \
+            dist/*
+
+  marketplace:
+    # Deliberately off until someone sets the PUBLISH_MARKETPLACE repository variable. The
+    # first publication should be done by hand and then looked at: a Marketplace listing is
+    # a public storefront, a published version can be unpublished but not replaced, and no
+    # workflow can tell you the page reads badly. Once the listing is right, set the
+    # variable and this takes over every subsequent tag.
+    name: marketplace
+    needs: [version, vsix]
+    if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_MARKETPLACE == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/node
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: maxdop-vsix
+          path: vsix
+
+      - name: Install vsce
+        working-directory: editors/vscode
+        run: npm ci
+
+      - name: Publish every platform VSIX as one version
+        working-directory: editors/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "::error::PUBLISH_MARKETPLACE is set but the VSCE_PAT secret is not"
+            exit 1
+          fi
+
+          # Every target in a single call. vsce then publishes them as one version, so a
+          # user on any platform sees it appear at the same moment; publishing one at a
+          # time leaves a version half-available on the Marketplace if a later call fails.
+          # The artifact carries .sha256 files alongside, hence the explicit glob.
+          npx vsce publish --packagePath "$GITHUB_WORKSPACE"/vsix/*.vsix

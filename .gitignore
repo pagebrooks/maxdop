@@ -1,0 +1,69 @@
+## Build output
+bin/
+obj/
+artifacts/
+publish/
+*.dbg
+
+## Rider / VS / VS Code
+.idea/
+.vs/
+*.user
+*.suo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+## Test / coverage
+TestResults/
+coverage/
+*.coverage
+*.trx
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+## Node (VS Code extension, added in Phase 1)
+node_modules/
+*.vsix
+editors/vscode/out/
+## The CLI binary is copied in at package time, per platform. `bin/` above already
+## ignores it; named here so it is obvious the directory is generated, not missing.
+editors/vscode/bin/
+
+## OS noise
+.DS_Store
+Thumbs.db
+
+## Local scratch — never commit employer-derived SQL. Sanitize into
+## tests/fixtures/ deliberately; this directory is the staging area.
+scratch/
+*.local.sql
+
+## Third-party corpus, fetched by tools/corpus/fetch.sh. Never committed: these are other
+## people's files, and the repo stays clean-room. Minimal hand-written
+## reproductions of bugs found here belong in tests/fixtures/.
+##
+## Anchored with a leading slash so it matches ./corpus only. Without it the pattern matches a
+## directory named corpus at any depth, which silently swallowed tests/corpus/ — the hand-written
+## construct suite, which IS committed. That suite exists because this one has a shape:
+## procedures and grammar fixtures, almost no plain application SQL.
+/corpus/
+
+# Working documents, kept locally and deliberately not published yet.
+#
+# project.md is the strategy half of the original planning document — the commercial and
+# go-to-market thinking. The other three are the engineering record: settled decisions, the day-1
+# feasibility spike, and every measurement run against real-world T-SQL. They are excluded as a set
+# because each one links to the others, so publishing any of them alone leaves dead references.
+#
+# Nothing user-facing depends on them: the guarantees and the measured numbers live in
+# docs/safety.md, which stands on its own.
+project.md
+ARCHITECTURE.md
+SPIKE.md
+CORPUS.md

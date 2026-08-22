@@ -1,0 +1,55 @@
+-- Principals and permissions.
+
+CREATE SCHEMA sales AUTHORIZATION dbo;
+GO
+
+CREATE ROLE SalesReader AUTHORIZATION dbo;
+GO
+
+CREATE USER AppUser WITHOUT LOGIN;
+GO
+
+CREATE USER ReportUser FOR LOGIN ReportLogin WITH DEFAULT_SCHEMA = sales;
+GO
+
+ALTER ROLE SalesReader ADD MEMBER AppUser;
+GO
+
+GRANT SELECT ON dbo.Customers TO SalesReader;
+GO
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.Orders TO SalesReader;
+GO
+
+GRANT SELECT ON dbo.Customers (CustomerId, Name) TO AppUser;
+GO
+
+GRANT EXECUTE ON dbo.GetCustomer TO AppUser WITH GRANT OPTION;
+GO
+
+GRANT SELECT ON SCHEMA::sales TO SalesReader;
+GO
+
+GRANT VIEW DEFINITION ON dbo.vCustomerOrders TO AppUser AS dbo;
+GO
+
+DENY DELETE ON dbo.Orders TO AppUser;
+GO
+
+REVOKE INSERT ON dbo.Orders FROM SalesReader;
+GO
+
+REVOKE GRANT OPTION FOR EXECUTE ON dbo.GetCustomer FROM AppUser CASCADE;
+GO
+
+ALTER ROLE SalesReader DROP MEMBER AppUser;
+GO
+
+DROP USER IF EXISTS ReportUser;
+GO
+
+DROP ROLE IF EXISTS SalesReader;
+GO
+
+DROP SCHEMA IF EXISTS sales;
+GO

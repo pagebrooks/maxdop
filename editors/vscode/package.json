@@ -1,0 +1,85 @@
+{
+  "name": "maxdop",
+  "displayName": "maxdop — T-SQL formatter",
+  "description": "Opinionated T-SQL formatter built on Microsoft's own parser. Handles stored procedures, GO batches and 2000-era syntax; verifies every format against the original before it touches your file.",
+  "icon": "icon.png",
+  "version": "0.1.0",
+  "publisher": "pbrooks",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pagebrooks/maxdop.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://github.com/pagebrooks/maxdop#readme",
+  "bugs": {
+    "url": "https://github.com/pagebrooks/maxdop/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Formatting runs the maxdop executable. In an untrusted workspace the path to that executable is taken only from your own user settings, never from the folder you opened.",
+      "restrictedConfigurations": [
+        "maxdop.path"
+      ]
+    }
+  },
+  "categories": [
+    "Formatters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "sql",
+    "t-sql",
+    "tsql",
+    "sql server",
+    "formatter"
+  ],
+  "activationEvents": [
+    "onLanguage:sql"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "maxdop",
+      "properties": {
+        "maxdop.path": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `maxdop` executable. Leave empty to use the one bundled with this extension. Formatting options are **not** configured here — they live in a `.maxdop.json` file in your repo, so everyone on the team formats the same way.",
+          "scope": "machine"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "maxdop.formatDocument",
+        "title": "Format Document with maxdop",
+        "category": "maxdop"
+      }
+    ],
+    "configurationDefaults": {
+      "[sql]": {
+        "editor.defaultFormatter": "pbrooks.maxdop"
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc --project tsconfig.json",
+    "watch": "tsc --project tsconfig.json --watch",
+    "build:binary": "node scripts/publish-cli.mjs",
+    "pretest": "npm run compile && npm run build:binary",
+    "test": "node --test \"out/test/*.test.js\"",
+    "package": "vsce package --target",
+    "test:integration": "npm run compile && node scripts/run-integration.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.6.0"
+  }
+}

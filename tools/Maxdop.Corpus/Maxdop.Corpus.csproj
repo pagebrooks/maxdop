@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Development tool, not a shipping artifact. Runs the formatter across a directory of real
+    T-SQL and reports where it stands: what fails to parse, what it refuses, how much still
+    falls through to passthrough, and whether output is stable. This is the instrument behind
+    Phase 0.5's kill criterion — "if it doesn't improve my own migration work, stop" needs a
+    number, not an impression.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Maxdop.Corpus</RootNamespace>
+    <AssemblyName>maxdop-corpus</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Maxdop.Core\Maxdop.Core.csproj" />
+  </ItemGroup>
+
+</Project>

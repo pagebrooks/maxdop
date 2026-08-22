@@ -1,0 +1,48 @@
+# Actions are pinned to commit SHAs, which is the only pin an attacker cannot move — a tag like
+# `@v7` is mutable, and whoever controls it controls this repository's release pipeline. The cost of
+# that pin is that it never updates on its own, so a SHA silently rots into an unpatched version.
+# Dependabot is the other half of the trade: it reads the `# v7` comment beside each SHA and opens a
+# pull request when the tag moves.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # ScriptDom is not Dependabot's job. The nightly `scriptdom` workflow already checks NuGet
+      # weekly, bumps the pin, runs the whole suite and reports what the grammar ratchet says about
+      # node types that appeared or vanished — which is the only part of a parser bump anyone needs
+      # to read. Dependabot's version of the same PR arrives without that answer.
+      - dependency-name: Microsoft.SqlServer.TransactSql.ScriptDom
+
+  - package-ecosystem: npm
+    directory: /editors/vscode
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    ignore:
+      # @types/node has to describe the Node the extension actually runs on, not the newest Node
+      # published. The host is whatever VS Code embeds — Node 20 at the `^1.90.0` floor in
+      # package.json — so types from a much later major describe APIs that are not there at runtime,
+      # which is worse than having no types for them. Bump this by hand, when the `node` pin in
+      # mise.toml moves.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+
+      # TypeScript majors are migrations, not updates. 7.0 rewrote module and type resolution: on
+      # this project it could not find @types/node at all and produced 30-odd errors from a tsconfig
+      # that had not changed. Worth doing deliberately, with time to fix the config.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]

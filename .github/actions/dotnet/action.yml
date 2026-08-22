@@ -1,0 +1,25 @@
+name: Pinned .NET SDK
+description: >-
+  Installs the exact SDK version pinned in mise.toml. The pin lives in one file
+  so a CI build and a developer's `mise exec -- dotnet build` cannot drift apart;
+  adding a global.json would give the same result by duplicating the number,
+  which is the thing worth avoiding.
+
+runs:
+  using: composite
+  steps:
+    - id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="$(sed -n 's/^ *dotnet *= *"\(.*\)"/\1/p' mise.toml | head -1)"
+        if [ -z "$version" ]; then
+          echo "::error file=mise.toml::no dotnet pin found — the CI SDK is read from this file"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Pinned SDK: $version"
+
+    - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+      with:
+        dotnet-version: ${{ steps.pin.outputs.version }}

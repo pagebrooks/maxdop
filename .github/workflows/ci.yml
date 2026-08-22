@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+    # No branch filter on purpose. The default branch here is `startup`, not
+    # `main`, and a filter naming the wrong branch fails silently — it does not
+    # error, it just never runs, which looks exactly like a green repo.
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - name: Test
+        run: dotnet test maxdop.slnx -c Release --nologo
+        # TreatWarningsAsErrors is set repo-wide in Directory.Build.props, so a
+        # warning fails here without any extra flag.
+
+  extension:
+    # The unit half of the extension's tests, which talk to a real binary but
+    # need no editor. The integration half runs in a real VS Code extension host
+    # and is not wired up here yet — it needs VS Code downloaded and a virtual
+    # display, and a harness that silently passes is worse than one that is
+    # absent, which is exactly how the first version of it behaved.
+    name: extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - uses: ./.github/actions/node
+
+      - name: Install native toolchain
+        run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
+
+      - name: Test
+        working-directory: editors/vscode
+        # `pretest` compiles the TypeScript and AOT-publishes the CLI into bin/,
+        # so this also proves the packaging script works on a clean checkout.
+        run: npm ci && npm test
+
+  aot:
+    # The managed build passing proves nothing about AOT: the trim/AOT analyzers
+    # run at compile time, but an analyzer-clean library can still fail when it is
+    # actually linked. Publishing the CLI is the only thing that links Maxdop.Core
+    # into a native image, so this job is the real gate — and it runs on every
+    # push, not only at release time, so a regression is attributed to its commit.
+    name: aot publish + smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+
+      - name: Install native toolchain
+        run: sudo apt-get update && sudo apt-get install --yes clang zlib1g-dev
+
+      - name: Publish
+        run: |
+          dotnet publish src/Maxdop.Cli/Maxdop.Cli.csproj -c Release -r linux-x64 \
+            -p:PublishAot=true -o publish
+
+      - name: Smoke test the native binary
+        run: |
+          set -euo pipefail
+          ./publish/maxdop --version
+
+          # The dogfood proof, run through the shipped binary rather than the
+          # library: rewrite the construct corpus in place, rewrite it again, and
+          # require the second pass to be a byte-level no-op. `--check` then has
+          # to agree. Kept inside the workspace so both passes discover the same
+          # config, the way a user's repo would.
+          mkdir -p smoke && cp tests/corpus/*.sql smoke/
+          ./publish/maxdop --write smoke/*.sql
+          cp -r smoke smoke-first-pass
+          ./publish/maxdop --write smoke/*.sql
+          diff -r smoke-first-pass smoke
+          ./publish/maxdop --check smoke/*.sql
+
+      - uses: ./.github/actions/node
+
+      - name: The README's demo image is not stale
+        working-directory: demos
+        # Reuses the binary published above rather than rendering anything: the
+        # check is a text comparison, so it costs seconds and needs no fonts.
+        # Without it the before/after image would keep advertising layout the
+        # formatter had stopped producing, and nothing would ever say so.
+        env:
+          MAXDOP_BINARY: ${{ github.workspace }}/publish/maxdop
+        run: npm ci && npm run check

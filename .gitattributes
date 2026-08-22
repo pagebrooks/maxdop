@@ -1,0 +1,21 @@
+# Line endings are pinned rather than left to each machine's git config, because this project
+# asserts on them.
+#
+# Most expected values in the test suite are raw string literals, whose newlines are the physical
+# bytes of the .cs file. A Windows checkout with core.autocrlf=true — the default on GitHub's
+# windows runners — turns those into CRLF, while the inputs beside them use "\n" escapes and so
+# stay LF. The formatter preserves its input's terminator, faithfully returns LF, and 104 tests
+# fail on a difference that exists only in the checkout. Normalising to LF everywhere removes the
+# variable rather than teaching every assertion to ignore it.
+* text=auto eol=lf
+
+# …except the fixtures, whose exact bytes are the thing under test. Encoding and terminator
+# behaviour is asserted against these files, so git must hand them over as committed and convert
+# nothing — including a deliberately CRLF fixture, should one be added. .editorconfig exempts the
+# same paths from editor normalisation, for the same reason.
+tests/fixtures/** -text
+
+# Binary, so git neither diffs nor converts them.
+*.png binary
+*.ico binary
+*.vsix binary

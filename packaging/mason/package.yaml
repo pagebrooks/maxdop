@@ -1,0 +1,49 @@
+# Draft of the mason.nvim registry entry, to be submitted as packages/maxdop/package.yaml
+# to https://github.com/mason-org/mason-registry once the repo is public and a release is tagged.
+#
+# Blocked on, in order: public repo -> tagged release with assets -> this PR.
+#
+# `{{ version | strip_prefix "v" }}` because the git tag is `v0.1.0` while the release workflow
+# names its assets from the version alone (`maxdop-0.1.0-linux-x64.tar.gz`). The nested `bin`
+# path is the directory inside each archive; templating works there too (see packages/gh).
+---
+name: maxdop
+description: |
+  An opinionated, config-file-driven T-SQL formatter built on Microsoft's own parser
+  (ScriptDom), so it understands stored procedures, GO batches and 2000-era syntax. Re-parses
+  its own output and returns the file untouched if anything differs.
+homepage: https://github.com/pagebrooks/maxdop
+licenses:
+  - MIT
+languages:
+  - SQL
+categories:
+  - Formatter
+
+source:
+  id: pkg:github/pagebrooks/maxdop@v0.1.0
+  asset:
+    - target: darwin_arm64
+      file: maxdop-{{ version | strip_prefix "v" }}-osx-arm64.tar.gz
+      bin: maxdop-{{ version | strip_prefix "v" }}-osx-arm64/maxdop
+    - target: darwin_x64
+      file: maxdop-{{ version | strip_prefix "v" }}-osx-x64.tar.gz
+      bin: maxdop-{{ version | strip_prefix "v" }}-osx-x64/maxdop
+    - target: linux_x64_gnu
+      file: maxdop-{{ version | strip_prefix "v" }}-linux-x64.tar.gz
+      bin: maxdop-{{ version | strip_prefix "v" }}-linux-x64/maxdop
+    - target: linux_arm64_gnu
+      file: maxdop-{{ version | strip_prefix "v" }}-linux-arm64.tar.gz
+      bin: maxdop-{{ version | strip_prefix "v" }}-linux-arm64/maxdop
+    - target: linux_x64_musl
+      file: maxdop-{{ version | strip_prefix "v" }}-linux-musl-x64.tar.gz
+      bin: maxdop-{{ version | strip_prefix "v" }}-linux-musl-x64/maxdop
+    - target: win_x64
+      file: maxdop-{{ version | strip_prefix "v" }}-win-x64.zip
+      bin: maxdop-{{ version | strip_prefix "v" }}-win-x64/maxdop.exe
+    - target: win_arm64
+      file: maxdop-{{ version | strip_prefix "v" }}-win-arm64.zip
+      bin: maxdop-{{ version | strip_prefix "v" }}-win-arm64/maxdop.exe
+
+bin:
+  maxdop: "{{source.asset.bin}}"

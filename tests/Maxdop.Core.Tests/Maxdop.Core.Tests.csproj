@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The test host and xunit use reflection by design, so the repo-wide AOT/trim analyzers
+       from Directory.Build.props do not apply here. Warnings stay visible but non-fatal:
+       test code should not be blocked by style rules aimed at shipping code. -->
+  <PropertyGroup>
+    <IsAotCompatible>false</IsAotCompatible>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- CA1707: Method_Describes_Behaviour is the standard xunit naming convention. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Maxdop.Core\Maxdop.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Fixtures are copied byte-for-byte into the output so tests resolve them the same way
+       locally and in CI. .editorconfig exempts tests/fixtures/** from newline and whitespace
+       normalisation, because their exact bytes are what encoding tests assert on. -->
+  <ItemGroup>
+    <None Include="..\fixtures\**\*.sql" LinkBase="fixtures" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The grammar surface baseline: every concrete ScriptDom node type as of the pinned parser.
+       Committed so an upgrade shows up as a reviewable diff rather than a changed number. -->
+  <ItemGroup>
+    <None Include="GrammarSurface.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The hand-written construct corpus. Committed, unlike ./corpus, which is fetched third-party
+       code that never enters the repo — so this is the only broad corpus CI can rely on. -->
+  <ItemGroup>
+    <None Include="..\corpus\**\*.sql" LinkBase="corpus" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

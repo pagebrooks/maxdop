@@ -1,0 +1,210 @@
+# The claims on the front page are measured against real-world T-SQL that is fetched, never
+# vendored — so until now nothing measured them except a laptop. CI sees only tests/corpus, twenty
+# hand-written files. This workflow is what makes "0 refused across 2,215 files" true today rather
+# than true on the day someone last ran it locally.
+#
+# It is a canary, not a gate: the corpus is other people's code and can change under us. A red run
+# means investigate, not block a release.
+name: nightly
+
+on:
+  schedule:
+    # Corpus, every night.
+    - cron: '17 3 * * *'
+    # Parser drift, Mondays only — ScriptDom ships every few months, so daily would be noise.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which check to run
+        type: choice
+        options: [all, corpus, scriptdom, deps]
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    # Cron picks the job; a manual run picks it from the dropdown.
+    if: >-
+      (github.event_name != 'schedule' && (inputs.job == 'all' || inputs.job == 'corpus'))
+      || github.event.schedule == '17 3 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+
+      # Refreshed weekly rather than nightly. Cloning four repositories every night is bandwidth
+      # spent to make the run *less* trustworthy: upstream would shift under it constantly and a red
+      # run would rarely mean what it looks like. A week-long key means six of seven runs measure the
+      # same corpus as the one before, so a change in the numbers is a change in maxdop.
+      # ISO year-week, so the key changes every Monday and the corpus is refetched then.
+      - name: Cache key
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore corpus
+        id: corpus-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: corpus
+          key: corpus-v1-${{ steps.week.outputs.week }}
+          restore-keys: corpus-v1-
+
+      - name: Fetch corpus
+        if: steps.corpus-cache.outputs.cache-hit != 'true'
+        run: tools/corpus/fetch.sh
+
+      - name: Provenance
+        run: cat corpus/MANIFEST.txt
+
+      - name: Sweep, once per configuration option
+        run: |
+          set -o pipefail
+          dotnet run --project tools/Maxdop.Corpus -c Release -- ./corpus --each-option \
+            | tee corpus-report.txt
+
+      # The binary is what people actually run, and the library tests never touch its own path:
+      # encoding detection, newline preservation, writing the file back. Formatting once and then
+      # asking --check whether anything would still change exercises exactly that.
+      #
+      # This is the one correct use of --check against someone else's code. Pointed at unformatted
+      # SQL it answers "yes, this would change" and exits 1 forever, which is worth nothing; run
+      # after --write it answers "is this a fixed point", which is worth a great deal.
+      - name: Formatting is a fixed point through the CLI
+        run: |
+          dotnet publish src/Maxdop.Cli -c Release -r linux-x64 -p:PublishAot=true -o aot
+
+          # Ola Hallengren rather than the whole corpus, because every file in it parses. Anything
+          # that does not parse comes back untouched and --check then reports it as a difference,
+          # which would make this step red for a reason that is not maxdop's.
+          cp -r corpus/olahallengren scratch
+
+          # maxdop searches a directory itself now, so there is no file list to build, no glob for
+          # a default bash to silently collapse, and no xargs to fold every exit code between 1 and
+          # 125 into its own 123. That last distinction is the whole contract: 1 is the input's
+          # problem, 2 is maxdop's, and this step needs to be able to tell them apart.
+          ./aot/maxdop --write scratch
+          ./aot/maxdop --check scratch
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Corpus'
+            echo
+            echo '```'
+            sed -n '/^option /,/^every option/p' corpus-report.txt
+            echo '```'
+            grep -E '^coverage' -A 2 corpus-report.txt || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: corpus-report
+          path: corpus-report.txt
+          retention-days: 14
+
+  scriptdom:
+    # Mondays, or on request. The grammar ratchet names the node types that appeared or vanished,
+    # which is the shortlist of new syntax worth a handler — a job that would have found 180.102.0
+    # the day it shipped instead of the week after.
+    if: >-
+      (github.event_name != 'schedule' && (inputs.job == 'all' || inputs.job == 'scriptdom'))
+      || github.event.schedule == '17 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+
+      - name: Compare the pin against the latest release
+        id: check
+        run: |
+          pinned="$(grep -oPm1 '(?<=<ScriptDomVersion>)[^<]+' Directory.Build.props)"
+          latest="$(curl -fsSL https://api.nuget.org/v3-flatcontainer/microsoft.sqlserver.transactsql.scriptdom/index.json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["versions"][-1])')"
+
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "**ScriptDom** pinned \`$pinned\`, latest \`$latest\`" >> "$GITHUB_STEP_SUMMARY"
+
+          [ "$pinned" = "$latest" ] && echo "newer=false" >> "$GITHUB_OUTPUT" || echo "newer=true" >> "$GITHUB_OUTPUT"
+
+      # Deliberately does not open a PR. What matters is the answer to "does the grammar surface
+      # move", and that is a thing to read, not to merge.
+      - name: Build and test against the newer parser
+        if: steps.check.outputs.newer == 'true'
+        env:
+          # Through the environment, not through ${{ }}. GitHub substitutes an expression into the
+          # script text before any shell sees it, so a version string from a third-party API
+          # containing a quote would stop being data and start being commands. The value is a NuGet
+          # response rather than anything a contributor controls, which lowers the odds, not the
+          # blast radius — and the environment costs nothing.
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          [[ "$LATEST" =~ ^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9.]+)?$ ]] || {
+            echo "::error::refusing to build against an implausible version: $LATEST"
+            exit 1
+          }
+
+          sed -i "s|<ScriptDomVersion>.*</ScriptDomVersion>|<ScriptDomVersion>$LATEST</ScriptDomVersion>|" \
+            Directory.Build.props
+          dotnet test maxdop.slnx -c Release --nologo
+
+      - name: Report
+        if: always() && steps.check.outputs.newer == 'true'
+        run: |
+          echo 'A newer ScriptDom exists. If the run above is green the bump is safe; if the grammar' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ratchet failed it names the node types that appeared or vanished — that list is the review.' >> "$GITHUB_STEP_SUMMARY"
+
+  deps:
+    # Nightly, because advisories are published on their own schedule rather than on ours. This is
+    # the gap the audit found: both commands below already existed and neither had ever run
+    # unattended, so a CVE landing in a dependency would have waited for somebody to think of it.
+    #
+    # Deliberately not Trivy or another scanner. Trivy earns its place on container images and OS
+    # packages, and maxdop ships neither — one static binary with two managed dependency trees, both
+    # of which have a first-party scanner that reads the real lockfile. A third tool here would add
+    # an action to pin and a second opinion to reconcile, for the same answer.
+    name: deps
+    if: >-
+      (github.event_name != 'schedule' && (inputs.job == 'all' || inputs.job == 'deps'))
+      || github.event.schedule == '17 3 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+      - uses: ./.github/actions/node
+
+      - name: NuGet advisories
+        run: |
+          set -o pipefail
+          dotnet list maxdop.slnx package --vulnerable --include-transitive | tee nuget.txt
+
+          # `dotnet list --vulnerable` exits 0 whether or not it found anything: it is a report, not
+          # a gate. Reading the exit code — the obvious thing to write — produces a step that passes
+          # forever and looks like a scan. The output has to be searched instead.
+          if grep -q 'has the following vulnerable packages' nuget.txt; then
+            echo "::error::vulnerable NuGet package(s) — see the log"
+            exit 1
+          fi
+
+          echo 'No vulnerable NuGet packages.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: npm advisories
+        working-directory: editors/vscode
+        run: |
+          # No `npm ci` first: audit reads package-lock.json directly, so this job never installs
+          # anything and never runs a third-party install script. Unlike the NuGet command, this one
+          # does exit nonzero on a finding. Dev dependencies are included — they never ship inside
+          # the VSIX, but they build and package it, which is a supply-chain position of its own.
+          npm audit --audit-level=moderate
+          echo 'No npm advisories at moderate or above.' >> "$GITHUB_STEP_SUMMARY"

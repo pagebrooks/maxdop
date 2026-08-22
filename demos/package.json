@@ -1,0 +1,19 @@
+{
+  "name": "demos",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate": "node generate.mjs",
+    "check": "node generate.mjs --check"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "shiki": "^4.4.3"
+  },
+  "type": "module"
+}

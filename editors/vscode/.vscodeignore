@@ -1,0 +1,20 @@
+# Everything the VSIX does not need at runtime. `bin/` is deliberately absent
+# from this list: the platform binary is the point of a platform-specific VSIX.
+.vscode/**
+node_modules/**
+src/**
+test/**
+out/test/**
+out/**/*.map
+scripts/**
+tsconfig.json
+# The icon ships as the rendered png; the svg it is generated from does not.
+icon.svg
+package-lock.json
+# Belt and braces: the release job extracts release archives to a directory
+# outside this one, but anything unpacked here by hand would otherwise be
+# packaged into the VSIX along with it.
+staging/**
+archives/**
+*.vsix
+

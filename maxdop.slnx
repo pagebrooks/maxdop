@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Maxdop.Cli/Maxdop.Cli.csproj" />
+    <Project Path="src/Maxdop.Core/Maxdop.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Maxdop.Cli.Tests/Maxdop.Cli.Tests.csproj" />
+    <Project Path="tests/Maxdop.Core.Tests/Maxdop.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Maxdop.Corpus/Maxdop.Corpus.csproj" />
+  </Folder>
+</Solution>

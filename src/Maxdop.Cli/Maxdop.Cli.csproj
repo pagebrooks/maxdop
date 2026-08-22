@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Maxdop.Cli</RootNamespace>
+    <AssemblyName>maxdop</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    The shipping artifact. Publishing this is also the only thing that ever
+    AOT-*links* Maxdop.Core: the analyzers run library-wide via Directory.Build.props, but an
+    analyzer-clean library can still fail at publish time, and the spike deliberately never
+    referenced Core. So `dotnet publish -p:PublishAot=true` on this project is the real gate.
+  -->
+  <PropertyGroup>
+    <PublishAot>true</PublishAot>
+
+    <!--
+      Deliberately NOT UseSystemResourceKeys. It trims the framework's exception messages down to
+      their resource identifiers, so "Access to the path is denied" reaches a pipeline author as
+      "UnauthorizedAccess_IODenied_Path" — on a wrong path, which is the most common CI
+      misconfiguration there is. Measured, it saves 8 KB of a 19 MB binary: 0.04%, for every
+      filesystem error message maxdop can produce. It was on for a long time on the assumption that
+      the trade was worth something.
+    -->
+    <UseSystemResourceKeys>false</UseSystemResourceKeys>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Maxdop.Core/Maxdop.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Maxdop.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

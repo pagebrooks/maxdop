@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Maxdop.Core</RootNamespace>
+    <AssemblyName>Maxdop.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="$(ScriptDomVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Maxdop.Core.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,8 @@
+[tools]
+dotnet = "10.0.302"
+
+# The VS Code extension's toolchain. 22 rather than latest: the extension host
+# runs the Node that ships inside VS Code, so building against a much newer one
+# invites emitting syntax the host cannot parse — a failure that only shows up
+# in someone else's editor.
+node = "22"
