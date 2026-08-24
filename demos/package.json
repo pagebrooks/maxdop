@@ -4,9 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "generate": "node generate.mjs",
-    "check": "node generate.mjs --check"
+    "check": "node generate.mjs --check",
+    "terminal": "node terminal/render.mjs",
+    "terminal:check": "node terminal/render.mjs --check"
   },
   "keywords": [],
   "author": "",

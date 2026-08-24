@@ -2,9 +2,10 @@ name: ci
 
 on:
   push:
-    # No branch filter on purpose. The default branch here is `startup`, not
-    # `main`, and a filter naming the wrong branch fails silently — it does not
-    # error, it just never runs, which looks exactly like a green repo.
+    # No branch filter on purpose. A filter naming a branch that does not exist
+    # fails silently — it does not error, it just never runs, which looks exactly
+    # like a green repo. This survived the default branch being renamed once
+    # already; `**` keeps it true whatever it is called next.
     branches: ['**']
   pull_request:
   workflow_dispatch:
@@ -102,3 +103,14 @@ jobs:
         env:
           MAXDOP_BINARY: ${{ github.workspace }}/publish/maxdop
         run: npm ci && npm run check
+
+      - name: The terminal demo recording is not stale
+        working-directory: demos
+        # Same guarantee, same cost, for docs/images/demo.gif — the recording the
+        # README and the Terminal Trove listing both show. Re-recording needs vhs,
+        # ttyd and ffmpeg and produces bytes that differ every run, so CI checks
+        # the text the demo puts on screen instead: if maxdop's layout moves, this
+        # fails and names the command that re-records it.
+        env:
+          MAXDOP_BINARY: ${{ github.workspace }}/publish/maxdop
+        run: npm run terminal:check

@@ -17,5 +17,9 @@ tests/fixtures/** -text
 
 # Binary, so git neither diffs nor converts them.
 *.png binary
+# The demo recording. Without this the `* text=auto` above applies its heuristics
+# to it, and a checkout that decides a GIF is text corrupts it with line-ending
+# conversion — the same way CRLF conversion broke the fixtures on Windows once.
+*.gif binary
 *.ico binary
 *.vsix binary

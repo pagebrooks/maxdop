@@ -175,6 +175,8 @@ formatted once per configuration option:
 Download a binary from [releases](../../releases), or grab the VS Code extension. Nothing is
 downloaded on first run and there is no runtime to install.
 
+![maxdop formatting a stored procedure at the command line, then gating it with --check](docs/images/demo.gif)
+
 ```sh
 maxdop query.sql                     # stdout
 maxdop --write src/                   # a file or a directory, searched to the bottom
