@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1
+
+No change to formatting. This version exists so the extension keeps step with the maxdop release it
+bundles; the binary inside behaves exactly as 0.1.0 did.
+
+- Bundles maxdop 0.1.1.
+- Marketplace listing rewritten — clearer on what the extension does, and on the fact that style is
+  configured in `.maxdop.json` rather than in editor settings.
+
 ## 0.1.0
 
 First public release.
