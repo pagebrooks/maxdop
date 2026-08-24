@@ -188,7 +188,7 @@ git diff --name-only -z | maxdop --check --files-from -   # only what changed, n
 maxdop --write-baseline src/                              # adopt on a codebase already written
 ```
 
-**Editors.** The VS Code extension bundles the binary for your platform. Neovim works through
+**Editors.** The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles the binary for your platform. Neovim works through
 [conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
 a command works too — the whole interface is stdin in, stdout out, exit code back.
 
