@@ -49,24 +49,33 @@ Show
 
 Sleep 700ms
 
+# The same command reads the file before and after, which is the whole structure of
+# this demo: identical input, identical viewer, and the only variable in between is
+# maxdop. Piping the formatted text through a highlighter instead would have shown
+# a longer command and invited the question of which tool did the work.
+#
+# `cat` here is bat, staged onto PATH under that name by render.mjs — see the note
+# there. It has to highlight on both sides: an earlier cut highlighted the mess and
+# let the formatted output land as plain terminal text, which made the tidy half
+# the drab half, because colour is what the eye grades before layout.
 Type "cat orders.sql" Sleep 400ms Enter
 Sleep 2600ms
 
-Type "maxdop orders.sql" Sleep 500ms Enter
+Type "maxdop --write orders.sql" Sleep 500ms Enter
+Sleep 1500ms
+
+Type "cat orders.sql" Sleep 400ms Enter
 Sleep 900ms
 
 # The still preview is taken here rather than at the end, with the mess and the
-# result both on screen and the CI lines not yet typed: in a gallery of thumbnails
+# result both on screen and the CI line not yet typed: in a gallery of thumbnails
 # the transformation is the whole pitch, a frame showing only tidy SQL could have
-# come from any editor, and two more commands would only shrink the type.
+# come from any editor, and another command would only shrink the type.
 Screenshot docs/images/demo.png
 
 Sleep 3200ms
 
 # The rest of the pitch, and the reason this is not just another formatter: an
 # exit code a pipeline can gate on.
-Type "maxdop --write orders.sql" Sleep 400ms Enter
-Sleep 1400ms
-
 Type "maxdop --check orders.sql && echo 'CI: formatting is clean'" Sleep 400ms Enter
 Sleep 3000ms

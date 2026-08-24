@@ -109,6 +109,31 @@ requireTool('vhs', 'See https://github.com/charmbracelet/vhs#installation.');
 requireTool('ttyd', 'vhs needs it to drive a real terminal.');
 requireTool('ffmpeg', 'vhs needs it to encode the GIF.');
 
+/**
+ * bat, whatever the local package manager decided to call it.
+ *
+ * Debian and Ubuntu ship it as `batcat` because `bat` collides with an existing
+ * package; Homebrew, Arch and the upstream release all call it `bat`. Resolving
+ * it here keeps that packaging detail out of the tape.
+ *
+ * It is then staged on PATH as `cat`, so the recording reads `cat orders.sql`.
+ * That is a presentation choice, made deliberately: `cat` is the command every
+ * viewer already knows, and the demo is about what maxdop did to the file, not
+ * about which pager rendered it. It sits alongside the staged `$` prompt and the
+ * fixed theme — the recording is dressed, and this is part of the dressing. The
+ * cost is that copying the command verbatim gives the same text without the
+ * colour, since real cat does not highlight.
+ */
+function bat() {
+  for (const name of ['bat', 'batcat']) {
+    const found = spawnSync('which', [name], { encoding: 'utf8' });
+    if (found.status === 0) {
+      return found.stdout.trim();
+    }
+  }
+  fail('neither bat nor batcat is installed. See https://github.com/sharkdp/bat#installation.');
+}
+
 // A scratch directory, so the demo types at `orders.sql` rather than at a path
 // that would show a machine's directory layout on screen — and so --write in the
 // second act cannot touch anything committed.
@@ -122,6 +147,7 @@ try {
   const bindir = join(stage, 'bin');
   mkdirSync(bindir);
   spawnSync('ln', ['-sf', bin, join(bindir, 'maxdop')]);
+  spawnSync('ln', ['-sf', bat(), join(bindir, 'cat')]);
 
   const run = spawnSync('vhs', [tape], {
     cwd: repo,
@@ -134,6 +160,17 @@ try {
       // not a hostname, a git branch, or whatever the recorder's shell theme is.
       PS1: '\\$ ',
       BASH_SILENCE_DEPRECATION_WARNING: '1',
+
+      // bat is configured here rather than in the tape so the recording can type
+      // a bare `cat orders.sql`. A screenful of flags would be the first thing a
+      // viewer read, and none of it is about maxdop.
+      //
+      // BAT_PAGER empty is load-bearing, not tidiness: bat pipes to less by
+      // default, and a pager waiting for input inside a recording hangs it until
+      // the tape times out.
+      BAT_PAGER: '',
+      BAT_STYLE: 'plain',
+      BAT_THEME: 'TwoDark',
     },
   });
 
