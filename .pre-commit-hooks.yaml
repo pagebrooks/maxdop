@@ -1,0 +1,31 @@
+# Hooks published to other people's repositories. Consumed as:
+#
+#   repos:
+#     - repo: https://github.com/pagebrooks/maxdop
+#       rev: v0.1.1        # the first tag containing this file
+#       hooks:
+#         - id: maxdop
+#
+# pre-commit resolves `rev` against this repository's git tags and reads this
+# file from the tag, not from main — so a tag that predates this file cannot be
+# used, however current main is. v0.1.0 was tagged before this existed, which
+# makes the next tag the earliest usable rev.
+#
+# `language: python` makes pre-commit build a virtualenv and pip install this
+# repository into it. That is what pyproject.toml at the root is for: it depends
+# on the maxdop wheel, so pip fetches the binary for whichever platform the
+# developer is on and no one has to install anything first.
+
+- id: maxdop
+  name: maxdop
+  description: Format T-SQL with maxdop, rewriting files in place.
+  entry: maxdop --write
+  language: python
+  types: [sql]
+
+- id: maxdop-check
+  name: maxdop (check)
+  description: Fail if any T-SQL file would be reformatted, without modifying it.
+  entry: maxdop --check
+  language: python
+  types: [sql]

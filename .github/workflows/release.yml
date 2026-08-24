@@ -306,9 +306,78 @@ jobs:
           path: vsix/*
           if-no-files-found: error
 
+  wheels:
+    # One PyPI wheel per platform, so `pip install maxdop`, `uvx maxdop` and
+    # `language: python` pre-commit hooks all get the native binary without a
+    # .NET runtime anywhere. Like the VSIXs, these repackage the archives the
+    # matrix already produced rather than rebuilding, so the binary a pip user
+    # runs is the binary that was tested and attested.
+    name: wheels
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RELEASE: ${{ needs.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: archives
+          pattern: maxdop-*
+          merge-multiple: true
+
+      - name: The pre-commit pin must match the version being released
+        if: ${{ needs.version.outputs.release == 'true' }}
+        # pyproject.toml exists so `language: python` hooks can install this
+        # repository; its pin is what decides which binary they get. Tagged with
+        # a stale pin, every hook user silently formats with the previous
+        # release. Nothing else in the build would notice.
+        run: |
+          set -euo pipefail
+          pin="$(grep -oP 'maxdop==\K[0-9][^"]*' pyproject.toml)"
+          if [ "$pin" != "$VERSION" ]; then
+            echo "::error::pyproject.toml pins maxdop==$pin but this release is $VERSION"
+            exit 1
+          fi
+
+      - name: Build one wheel per platform
+        run: |
+          set -euo pipefail
+
+          # A wheel filename uses "-" as its field separator, so a version
+          # containing one does not round-trip. Dispatch runs are trimmed the
+          # way the VSIXs are, because they are artifacts for inspection; a real
+          # release is rejected instead, since a mislabelled wheel on PyPI can
+          # never be replaced.
+          if [ "$RELEASE" = true ]; then
+            case "$VERSION" in
+              *[!0-9.]*)
+                echo "::error::$VERSION is not a plain x.y.z, which PEP 440 needs for a wheel"
+                exit 1
+                ;;
+            esac
+            wheel_version="$VERSION"
+          else
+            wheel_version="${VERSION%%-*}"
+          fi
+
+          python3 packaging/pypi/build_wheels.py \
+            --version "$wheel_version" --archives archives --out wheels
+
+          cd wheels
+          for f in *.whl; do sha256sum "$f" > "$f.sha256"; done
+          ls -lh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: maxdop-wheels
+          path: wheels/*
+          if-no-files-found: error
+
   release:
     name: release
-    needs: [version, build, vsix]
+    needs: [version, build, vsix, wheels]
     if: ${{ needs.version.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -351,6 +420,7 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/*.vsix
+            dist/*.whl
 
       - name: Publish the release
         env:
@@ -403,3 +473,34 @@ jobs:
           # time leaves a version half-available on the Marketplace if a later call fails.
           # The artifact carries .sha256 files alongside, hence the explicit glob.
           npx vsce publish --packagePath "$GITHUB_WORKSPACE"/vsix/*.vsix
+
+  pypi:
+    # Off until someone sets the PUBLISH_PYPI repository variable, for the same
+    # reason as the Marketplace job: a PyPI version can never be replaced, only
+    # yanked, and the first publication is worth doing deliberately and then
+    # looking at. Once the listing reads well, set the variable and this takes
+    # over every subsequent tag.
+    #
+    # No token. PyPI verifies an OIDC token minted for this repository, this
+    # workflow file and this environment, so all three must match the publisher
+    # registered at pypi.org/manage/project/maxdop/settings/publishing.
+    name: pypi
+    needs: [version, wheels]
+    if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_PYPI == 'true' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: maxdop-wheels
+          path: dist
+
+      - name: Leave only the wheels
+        # The artifact carries a .sha256 beside each wheel, and the publish
+        # action uploads whatever it finds in the directory.
+        run: rm -f dist/*.sha256
+
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

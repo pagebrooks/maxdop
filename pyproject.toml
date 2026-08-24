@@ -1,0 +1,27 @@
+# This file exists for pre-commit, not for Python.
+#
+# A `language: python` hook is installed by pip installing the hook repository
+# itself, so the repository has to be a Python project even though maxdop is a
+# .NET one. This package ships no code: its entire purpose is to depend on the
+# maxdop wheel, which carries the native binary and puts it on PATH.
+#
+# The pin below must match the tag it is released under. See .pre-commit-hooks.yaml.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "maxdop-pre-commit"
+version = "0.1.1"
+description = "pre-commit hooks for maxdop, the T-SQL formatter"
+requires-python = ">=3.8"
+license = "MIT"
+dependencies = ["maxdop==0.1.1"]
+
+[project.urls]
+Homepage = "https://github.com/pagebrooks/maxdop"
+
+[tool.hatch.build.targets.wheel]
+# Metadata only — there is no Python package here to collect.
+bypass-selection = true
