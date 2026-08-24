@@ -5,7 +5,11 @@ binary you run in CI.
 
 ## VS Code
 
-Install the extension. It bundles the binary for your platform — nothing is downloaded on activation.
+Install the [extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop). It bundles the binary for your platform — nothing is downloaded on activation.
+
+```jsonc
+"[sql]": { "editor.defaultFormatter": "pbrooks.maxdop" }
+```
 
 If you also have Microsoft's [mssql](https://marketplace.visualstudio.com/items?itemName=ms-mssql.mssql)
 extension installed, both register a formatter for SQL and VS Code needs to know which one to use.
