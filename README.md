@@ -172,7 +172,7 @@ formatted once per configuration option:
 
 ## Install and use
 
-Download a binary from [releases](../../releases), or grab the VS Code extension. Nothing is
+Download a binary from [releases](../../releases), or grab the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop). Nothing is
 downloaded on first run and there is no runtime to install.
 
 ![maxdop formatting a stored procedure at the command line, then gating it with --check](docs/images/demo.gif)
