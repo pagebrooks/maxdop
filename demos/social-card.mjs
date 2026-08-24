@@ -1,0 +1,198 @@
+// Renders the GitHub social preview card, docs/images/social-preview.{svg,png}.
+//
+// The code in the card is not a mockup: it is demos/card.sql put through the
+// real CLI, highlighted with the same shiki grammar and VS Code theme the
+// before/after images use. A card claiming "checks its own work" should not be
+// showing layout the formatter cannot produce.
+//
+//   node social-card.mjs           regenerate the card
+//   node social-card.mjs --check   fail if the committed card is stale
+//
+// GitHub renders this at 1280x640 and recommends a 40pt (80px) safe margin, so
+// every element except the bottom accent bar sits inside 80px of the edges.
+
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Resvg } from '@resvg/resvg-js';
+import { codeToTokens } from 'shiki';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repo = join(here, '..');
+const check = process.argv.includes('--check');
+
+const CARD = { w: 1280, h: 640, safe: 80 };
+const PANEL = { x: 670, y: 92, w: 530, h: 446, pad: 32, header: 36, radius: 14 };
+
+const MONO = 'DejaVu Sans Mono';
+const SANS = 'DejaVu Sans';
+const ADVANCE = 0.602; // DejaVu Sans Mono's advance width, in em.
+const LINE_RATIO = 1.45;
+
+/** Brand palette, taken from editors/vscode/icon.svg. */
+const C = {
+  green: '#0b6b53',
+  mint: '#a7dccb',
+  mintDim: '#85c7ac',
+  white: '#ffffff',
+};
+
+const binary =
+  process.env.MAXDOP_BINARY ??
+  join(repo, 'editors', 'vscode', 'bin', process.platform === 'win32' ? 'maxdop.exe' : 'maxdop');
+
+const sqlPath = join(here, 'card.sql');
+const formatted = format(sqlPath).replace(/\n$/, '');
+
+const svg = await toSvg(formatted);
+const images = join(repo, 'docs', 'images');
+const svgPath = join(images, 'social-preview.svg');
+const pngPath = join(images, 'social-preview.png');
+
+if (check) {
+  let committed;
+  try {
+    committed = readFileSync(svgPath, 'utf8');
+  } catch {
+    fail(`no card at ${svgPath}. Run "npm run card".`);
+  }
+
+  if (committed !== svg) {
+    fail(
+      'the committed social card no longer matches what maxdop produces.\n' +
+        'Run "npm run card" in demos/ and commit the result.',
+    );
+  }
+
+  console.log('card: matches current formatter output');
+  process.exit(0);
+}
+
+mkdirSync(images, { recursive: true });
+writeFileSync(svgPath, svg);
+
+const png = new Resvg(svg, {
+  font: { loadSystemFonts: true, defaultFontFamily: SANS },
+}).render().asPng();
+
+writeFileSync(pngPath, png);
+console.log(`docs/images/social-preview.png  1280x640  ${(png.length / 1024).toFixed(0)} KB`);
+
+/** Formats a file with the real CLI, failing loudly rather than rendering something stale. */
+function format(path) {
+  const result = spawnSync(binary, [path], { encoding: 'utf8' });
+
+  if (result.error?.code === 'ENOENT') {
+    fail(`no maxdop binary at ${binary}.\nBuild one with "npm run build:binary" in editors/vscode, or set MAXDOP_BINARY.`);
+  }
+  if (result.status !== 0) {
+    fail(`maxdop exited ${result.status}: ${result.stderr?.trim()}`);
+  }
+
+  return result.stdout;
+}
+
+async function toSvg(code) {
+  const { tokens, fg } = await codeToTokens(code, { lang: 'sql', theme: 'dark-plus' });
+
+  // The font size is derived from the snippet rather than fixed, so editing
+  // card.sql cannot silently push code outside the panel.
+  const cols = Math.max(...tokens.map((line) => line.reduce((n, t) => n + t.content.length, 0)));
+  const availW = PANEL.w - PANEL.pad * 2;
+  const availH = PANEL.h - PANEL.header - PANEL.pad * 2;
+  const size = Math.floor(
+    Math.min(availW / (cols * ADVANCE), availH / ((tokens.length - 1) * LINE_RATIO + 1)),
+  );
+  const lineHeight = size * LINE_RATIO;
+
+  // Centre the block in the panel below its header strip.
+  const blockH = (tokens.length - 1) * lineHeight + size;
+  const blockW = cols * ADVANCE * size;
+  const x0 = PANEL.x + (PANEL.w - blockW) / 2;
+  const top = PANEL.y + PANEL.header + (PANEL.h - PANEL.header - blockH) / 2;
+
+  const lines = tokens.map((line, row) => {
+    const y = top + row * lineHeight + size * 0.8;
+    let column = 0;
+    const spans = [];
+
+    for (const token of line) {
+      if (token.content.trim().length > 0) {
+        // Absolute column per token, as in generate.mjs: a machine without the
+        // exact font changes glyph shapes but never breaks the alignment.
+        spans.push(
+          `<tspan x="${(x0 + column * ADVANCE * size).toFixed(2)}" fill="${token.color ?? fg}">${escape(token.content)}</tspan>`,
+        );
+      }
+      column += token.content.length;
+    }
+
+    return spans.length === 0
+      ? null
+      : `    <text y="${y.toFixed(2)}" font-family="${MONO}" font-size="${size}" xml:space="preserve">${spans.join('')}</text>`;
+  });
+
+  const r = PANEL.radius;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD.w}" height="${CARD.h}" viewBox="0 0 ${CARD.w} ${CARD.h}">
+  <!-- Generated by demos/social-card.mjs. Do not edit by hand. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b2b23"/>
+      <stop offset="1" stop-color="#051611"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.22" r="0.55">
+      <stop offset="0" stop-color="${C.green}" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="${C.green}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="${CARD.w}" height="${CARD.h}" fill="url(#bg)"/>
+  <rect width="${CARD.w}" height="${CARD.h}" fill="url(#glow)"/>
+  <rect x="0" y="${CARD.h - 8}" width="${CARD.w}" height="8" fill="${C.green}"/>
+
+  <g transform="translate(${CARD.safe} 92) scale(0.65625)">
+    <rect width="128" height="128" rx="26" fill="${C.green}"/>
+    <rect x="22" y="27" width="58" height="10" rx="5" fill="${C.white}"/>
+    <rect x="40" y="43" width="56" height="10" rx="5" fill="${C.mint}"/>
+    <rect x="40" y="59" width="46" height="10" rx="5" fill="${C.mint}"/>
+    <rect x="22" y="75" width="40" height="10" rx="5" fill="${C.white}"/>
+    <rect x="40" y="91" width="64" height="10" rx="5" fill="${C.mint}"/>
+  </g>
+
+  <text x="194" y="163" font-family="${MONO}" font-size="80" font-weight="bold" fill="${C.white}">maxdop</text>
+  <text x="${CARD.safe}" y="224" font-family="${SANS}" font-size="25" fill="${C.mintDim}">Max Degree of Prettiness for your T-SQL</text>
+
+  <text x="${CARD.safe}" y="300" font-family="${SANS}" font-size="44" font-weight="bold" fill="${C.white}">Free (MIT).</text>
+  <text x="${CARD.safe}" y="354" font-family="${SANS}" font-size="44" font-weight="bold" fill="${C.white}">Runs in CI.</text>
+  <text x="${CARD.safe}" y="408" font-family="${SANS}" font-size="44" font-weight="bold" fill="${C.white}">Checks its own work.</text>
+
+  <g font-family="${MONO}" font-size="19" fill="${C.mint}">
+    <rect x="80"  y="448" width="234" height="46" rx="23" fill="#0e3a2f" stroke="#1d5a49"/>
+    <text x="100" y="477">One static binary</text>
+    <rect x="330" y="448" width="154" height="46" rx="23" fill="#0e3a2f" stroke="#1d5a49"/>
+    <text x="350" y="477">No runtime</text>
+    <rect x="80"  y="508" width="303" height="46" rx="23" fill="#0e3a2f" stroke="#1d5a49"/>
+    <text x="100" y="537">Windows · Linux · macOS</text>
+  </g>
+
+  <g>
+    <rect x="${PANEL.x}" y="${PANEL.y}" width="${PANEL.w}" height="${PANEL.h}" rx="${r}" fill="#12211d" stroke="#1d5a49"/>
+    <path d="M${PANEL.x} ${PANEL.y + r} a${r} ${r} 0 0 1 ${r} ${-r} h${PANEL.w - r * 2} a${r} ${r} 0 0 1 ${r} ${r} v${PANEL.header - r} h${-PANEL.w} Z" fill="#1b3730"/>
+    <line x1="${PANEL.x}" y1="${PANEL.y + PANEL.header}" x2="${PANEL.x + PANEL.w}" y2="${PANEL.y + PANEL.header}" stroke="#1d5a49"/>
+    <text x="${PANEL.x + 22}" y="${PANEL.y + PANEL.header - 13}" font-family="${MONO}" font-size="14" fill="#7fb9a4">formatted by maxdop</text>
+${lines.filter(Boolean).join('\n')}
+  </g>
+</svg>
+`;
+}
+
+function escape(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function fail(message) {
+  console.error(`card: ${message}`);
+  process.exit(1);
+}

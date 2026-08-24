@@ -1,0 +1,110 @@
+# Proves the WinGet manifests in packaging/winget/ actually install something that runs.
+#
+# Everything else about those manifests can be checked on Linux — the JSON schemas are public, and
+# `komac analyze` derives the installer block straight from the archive. One thing cannot: whether
+# `NestedInstallerFiles.RelativeFilePath` points at the executable. Get it wrong and the package
+# installs cleanly, reports success, and leaves no working command. Schema validation passes, a
+# reviewer sees nothing, and the first person to find out is a user.
+#
+# So this installs the package from the local manifests on a real Windows machine and then runs the
+# binary. It is manual, not per-push: it exists for the minutes before a submission to winget-pkgs,
+# and after a release when the manifests have been pointed at new archives.
+name: winget manifest
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packaging/winget/**'
+      - '.github/workflows/winget-manifest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Validate and install
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # winget is not on the runner image. It ships with App Installer, which is a Store package,
+      # and these are Windows Server SKUs without the Store — so it has to be installed first.
+      - name: Install winget
+        uses: Cyberboss/install-winget@6f566e9e227561d5d31e45d65f9b777b3fa8f56f # v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate the manifests
+        shell: pwsh
+        run: |
+          winget validate --manifest packaging\winget
+          if ($LASTEXITCODE -ne 0) { throw "winget validate failed" }
+
+      - name: Install from the local manifests
+        shell: pwsh
+        run: |
+          # Off by default, because installing from a manifest bypasses the signed repository.
+          winget settings --enable LocalManifestFiles
+
+          winget install --manifest packaging\winget `
+            --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget install failed with $LASTEXITCODE" }
+
+      - name: The installed command runs
+        shell: pwsh
+        run: |
+          # A portable package writes its shim to a links directory that is added to PATH for *new*
+          # processes; this step's shell started before that happened, so PATH is refreshed by hand
+          # rather than trusting inheritance.
+          $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                      [Environment]::GetEnvironmentVariable('PATH', 'User')
+
+          # -join is load-bearing. `maxdop --version` prints two lines, so PowerShell captures an
+          # array, and a comparison operator against an array *filters* it instead of returning a
+          # boolean: `$array -notmatch 'x'` yields every element without 'x', and a non-empty array
+          # is truthy. The grammar line never contains the version, so the check below would throw
+          # on a perfectly good install.
+          $version = (maxdop --version) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "maxdop exited $LASTEXITCODE" }
+          Write-Host $version
+
+          # The point of the whole job: not that a file landed somewhere, but that the shim WinGet
+          # created resolves to a binary that runs and identifies itself as the version the manifest
+          # claims to install.
+          $expected = (Get-Content packaging\winget\pagebrooks.maxdop.yaml |
+            Select-String -Pattern '^PackageVersion:' |
+            ForEach-Object { $_.Line -replace '^PackageVersion:\s*', '' }).Trim()
+
+          if (-not $expected) { throw "no PackageVersion in the version manifest" }
+
+          if ($version -notmatch [regex]::Escape($expected)) {
+            throw "manifest declares $expected, the installed binary reports '$version'"
+          }
+
+          Write-Host "::notice::maxdop $expected installs from the manifests and runs"
+
+      - name: It formats SQL, not just starts
+        shell: pwsh
+        run: |
+          $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                      [Environment]::GetEnvironmentVariable('PATH', 'User')
+
+          Set-Content -Path query.sql -Value 'select a,b from dbo.t where a=1'
+          $out = (maxdop query.sql) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "maxdop exited $LASTEXITCODE" }
+
+          if ($out -notmatch '^SELECT\b') {
+            throw "expected formatted SQL, got: $out"
+          }
+          Write-Host "formatted: $out"
+
+      - name: Uninstall cleanly
+        if: always()
+        shell: pwsh
+        run: |
+          # `if: always()` so a failure above still exercises this. An uninstall that leaves the shim
+          # behind is a defect in the manifest too, and this is the only place it would show up.
+          winget uninstall --id pagebrooks.maxdop --disable-interactivity
+          Write-Host "uninstall exited $LASTEXITCODE"

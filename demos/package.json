@@ -6,6 +6,8 @@
   "scripts": {
     "generate": "node generate.mjs",
     "check": "node generate.mjs --check",
+    "card": "node social-card.mjs",
+    "card:check": "node social-card.mjs --check",
     "terminal": "node terminal/render.mjs",
     "terminal:check": "node terminal/render.mjs --check"
   },

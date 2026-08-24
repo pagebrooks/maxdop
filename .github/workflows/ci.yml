@@ -114,3 +114,14 @@ jobs:
         env:
           MAXDOP_BINARY: ${{ github.workspace }}/publish/maxdop
         run: npm run terminal:check
+
+      - name: The social preview card is not stale
+        working-directory: demos
+        # docs/images/social-preview.png embeds real formatter output, so a layout
+        # change would leave the card GitHub puts in front of every link to this
+        # repository advertising SQL maxdop no longer produces. Same trade as the
+        # demo image: a text comparison against the generated SVG, so it needs no
+        # fonts and costs seconds.
+        env:
+          MAXDOP_BINARY: ${{ github.workspace }}/publish/maxdop
+        run: npm run card:check

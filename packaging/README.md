@@ -45,26 +45,46 @@ machinery before relying on it:
 
 ## WinGet
 
-Manifests go into `microsoft/winget-pkgs` under
-`manifests/p/pagebrooks/maxdop/<version>/`, as a pull request. Do not hand-build the PR; use
-Microsoft's own tool, which generates the manifests, validates them against the schema, and opens
-the PR for you:
+Manifests go into `microsoft/winget-pkgs` under `manifests/p/pagebrooks/maxdop/<version>/`, as a
+pull request. The three files in `winget/` are that set: version, installer and locale, declaring a
+`zip` installer with `NestedInstallerType: portable`, because the archive contains a folder rather
+than a bare executable.
 
-```powershell
-winget install Microsoft.WingetCreate
+**No Windows machine is needed.** Microsoft's own `wingetcreate` is Windows-only, but
+[komac](https://github.com/russellbanks/Komac) does the same job and ships Linux and macOS builds:
 
-# Generates manifests from the release archives and submits the PR.
-wingetcreate new https://github.com/pagebrooks/maxdop/releases/download/v0.1.0/maxdop-0.1.0-win-x64.zip
-
-# For later versions, update the existing package instead:
-wingetcreate update pagebrooks.maxdop --version 0.2.0 --urls <x64-zip> <arm64-zip> --submit
+```sh
+komac submit --token <github-pat> packaging/winget
 ```
 
-The manifests in `winget/` are the shape those commands should produce — a three-file set (version,
-installer, locale) declaring a `zip` installer with `NestedInstallerType: portable`, because the
-archive contains a folder rather than a bare executable. Keep them as the reference for what was
-submitted; let `wingetcreate` generate the copy that actually goes in the PR, since it tracks the
-current schema version and this file does not.
+It forks `winget-pkgs`, commits the manifests to the right path, and opens the PR. The token needs
+`public_repo` scope.
+
+Komac is also the cheapest way to check the manifests are right, because it derives them
+independently from the archive:
+
+```sh
+komac analyze maxdop-0.1.0-win-x64.zip
+```
+
+Compare its output against `winget/pagebrooks.maxdop.installer.yaml`. Two details it settles that are
+easy to get wrong by hand, and both were wrong here first:
+
+- **`RelativeFilePath` uses forward slashes**, not the backslashes Windows paths suggest. Accepted
+  manifests such as `sharkdp/bat` do the same.
+- **`ReleaseDate` must be quoted.** Unquoted, YAML parses it as a date rather than a string and the
+  manifest fails schema validation.
+
+The schemas themselves are public, so the whole set can be validated anywhere:
+
+```sh
+curl -O https://aka.ms/winget-manifest.installer.1.6.0.schema.json    # and .version. / .defaultLocale.
+```
+
+On Windows, `winget validate --manifest packaging\winget` adds URL and hash checks, and
+`winget install --manifest packaging\winget` is the only test that proves the nested path is
+right — a wrong one installs cleanly and leaves no working command. A `windows-latest` GitHub
+Actions runner does this without owning a Windows machine.
 
 Two things to expect:
 
