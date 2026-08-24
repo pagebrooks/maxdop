@@ -12,9 +12,9 @@ One static binary. No runtime to install. The formatter is free and MIT — all 
 </picture>
 
 ```sh
-maxdop query.sql                  # formatted SQL to stdout
-maxdop --write src/                # format every .sql under src/, in place
-maxdop --check src/                # fail the build if anything would change
+maxdop query.sql       # formatted SQL to stdout
+maxdop --write src/    # format every .sql under src/, in place
+maxdop --check src/    # fail the build if anything would change
 ```
 
 Windows, macOS, Linux and Alpine; x64 and arm64. ~3.5 ms cold start. The binary in your editor is
@@ -170,29 +170,77 @@ formatted once per configuration option:
 
 ---
 
-## Install and use
+## Install
 
-Download a binary from [releases](../../releases), or grab the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop). Nothing is
-downloaded on first run and there is no runtime to install.
+One static executable. No .NET runtime, no Node, no installer, nothing fetched on first run.
+
+### Package managers
+
+| | |
+| --- | --- |
+| **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
+
+More are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
+[`packaging/`](packaging/) is welcome.
+
+### Download it yourself
+
+Pick your platform from [the latest release](../../releases/latest) — `linux-x64`, `linux-arm64`,
+`linux-musl-x64` (Alpine), `osx-x64`, `osx-arm64`, `win-x64` or `win-arm64`.
+
+**macOS and Linux**
+
+```sh
+V=0.1.0; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
+
+curl -fsSLO "https://github.com/pagebrooks/maxdop/releases/download/v$V/maxdop-$V-$RID.tar.gz"
+tar -xzf "maxdop-$V-$RID.tar.gz"
+sudo install "maxdop-$V-$RID/maxdop" /usr/local/bin/
+```
+
+**Windows** — download `maxdop-<version>-win-x64.zip` (or `win-arm64`), extract it, and put
+`maxdop.exe` somewhere on your `PATH`.
+
+<sub>The archives are unsigned, so macOS Gatekeeper and Windows SmartScreen warn on a direct
+download. Installing through a package manager or the VS Code extension avoids that.</sub>
+
+### Verify what you downloaded
+
+Every archive carries [build provenance](https://github.com/actions/attest-build-provenance) — proof
+that these exact bytes came out of this repository's release workflow, which a checksum alone cannot
+give you, since anyone who could replace the binaries could rewrite `SHA256SUMS` beside them.
+
+```sh
+gh attestation verify "maxdop-$V-$RID.tar.gz" --repo pagebrooks/maxdop
+```
+
+`SHA256SUMS` is attached to every release as well.
+
+### In an editor
+
+The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles
+the binary for your platform, so it needs none of the above. Neovim works through
+[conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
+a command works too — the whole interface is stdin in, stdout out, exit code back.
+
+[Editor setup →](docs/editors.md)
+
+## Use
 
 ![maxdop formatting a stored procedure at the command line, then gating it with --check](docs/images/demo.gif)
 
 ```sh
-maxdop query.sql                     # stdout
-maxdop --write src/                   # a file or a directory, searched to the bottom
-maxdop --check src/                   # exit 1 if anything would change
-maxdop --parser-version 2016         # pin the grammar
-cat query.sql | maxdop               # stdin to stdout, how editors call it
+maxdop query.sql                # stdout
+maxdop --write src/             # a file or a directory, searched to the bottom
+maxdop --check src/             # exit 1 if anything would change
+maxdop --parser-version 2016    # pin the grammar
+cat query.sql | maxdop          # stdin to stdout, how editors call it
 
 git diff --name-only -z | maxdop --check --files-from -   # only what changed, no git dependency
 maxdop --write-baseline src/                              # adopt on a codebase already written
 ```
 
-**Editors.** The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles the binary for your platform. Neovim works through
-[conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
-a command works too — the whole interface is stdin in, stdout out, exit code back.
-
-[Editor setup →](docs/editors.md) · [Exit codes and CLI reference →](docs/cli.md)
+[Exit codes and CLI reference →](docs/cli.md)
 
 ## Configuration
 
