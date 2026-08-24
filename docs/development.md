@@ -24,6 +24,7 @@ pipeline build cannot drift.
 | `demos/` | Generates the before/after image in the README from the real binary |
 | `demos/terminal/` | Records the terminal demo — `docs/images/demo.gif` and `demo.png` — with VHS |
 | `tools/Maxdop.Corpus/` | Dev harness that measures coverage, per option, and ranks what to build next |
+| `packaging/` | Manifests for Scoop, WinGet and mason, plus how each is submitted |
 | `mise.toml` | Pinned toolchain — `mise install` and you have it |
 
 ## Regenerating the demo images

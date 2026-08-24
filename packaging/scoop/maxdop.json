@@ -1,0 +1,38 @@
+{
+    "version": "0.1.0",
+    "description": "An opinionated T-SQL formatter built on Microsoft's own parser. Runs in CI, understands the whole language, and verifies every format against your original before writing it.",
+    "homepage": "https://github.com/pagebrooks/maxdop",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/pagebrooks/maxdop/releases/download/v0.1.0/maxdop-0.1.0-win-x64.zip",
+            "hash": "f76816f452247552eaed304080c47a739c598080db0b13d12735f1329b26cc08",
+            "extract_dir": "maxdop-0.1.0-win-x64"
+        },
+        "arm64": {
+            "url": "https://github.com/pagebrooks/maxdop/releases/download/v0.1.0/maxdop-0.1.0-win-arm64.zip",
+            "hash": "24a509b97f17d661c5ab015b3f4d9841f92fb7a90f78841f3bb3e685bbad9052",
+            "extract_dir": "maxdop-0.1.0-win-arm64"
+        }
+    },
+    "bin": "maxdop.exe",
+    "checkver": {
+        "github": "https://github.com/pagebrooks/maxdop"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/pagebrooks/maxdop/releases/download/v$version/maxdop-$version-win-x64.zip",
+                "extract_dir": "maxdop-$version-win-x64"
+            },
+            "arm64": {
+                "url": "https://github.com/pagebrooks/maxdop/releases/download/v$version/maxdop-$version-win-arm64.zip",
+                "extract_dir": "maxdop-$version-win-arm64"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS",
+            "regex": "$sha256\\s+\\*?$basename"
+        }
+    }
+}

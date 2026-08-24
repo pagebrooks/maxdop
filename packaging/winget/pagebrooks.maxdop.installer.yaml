@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: pagebrooks.maxdop
+PackageVersion: 0.1.0
+InstallerType: zip
+NestedInstallerType: portable
+Commands:
+  - maxdop
+ReleaseDate: 2026-08-22
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/pagebrooks/maxdop/releases/download/v0.1.0/maxdop-0.1.0-win-x64.zip
+    InstallerSha256: F76816F452247552EAED304080C47A739C598080DB0B13D12735F1329B26CC08
+    NestedInstallerFiles:
+      - RelativeFilePath: maxdop-0.1.0-win-x64\maxdop.exe
+        PortableCommandAlias: maxdop
+  - Architecture: arm64
+    InstallerUrl: https://github.com/pagebrooks/maxdop/releases/download/v0.1.0/maxdop-0.1.0-win-arm64.zip
+    InstallerSha256: 24A509B97F17D661C5AB015B3F4D9841F92FB7A90F78841F3BB3E685BBAD9052
+    NestedInstallerFiles:
+      - RelativeFilePath: maxdop-0.1.0-win-arm64\maxdop.exe
+        PortableCommandAlias: maxdop
+ManifestType: installer
+ManifestVersion: 1.6.0

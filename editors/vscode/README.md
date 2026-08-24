@@ -16,10 +16,11 @@ delimiters, and 2000-era legacy syntax.
 -->
 ![A stored procedure before and after maxdop](https://raw.githubusercontent.com/pagebrooks/maxdop/v0.1.0/docs/images/before-after-dark.png)
 
-## Two invariants that are the whole point
+## Safety Measures
 
-1. **It cannot break your code.** Every format re-parses its own output and compares it against the
-   input. On any mismatch you get your original text back, untouched.
+1. **It cannot break your code.** Every format re-parses its own output and compares the token
+   stream, the tree and the comments against the input. On any mismatch you get your original text
+   back, untouched.
 2. **It never destroys a file.** Constructs the formatter doesn't handle are emitted verbatim. A
    file that fails to parse is left exactly as it was, with the reason in the **maxdop** output
    channel.
@@ -38,6 +39,50 @@ default for SQL when other formatters are installed:
 
 The CLI is bundled — there is nothing to install separately, and nothing is downloaded on first
 activation.
+
+maxdop formats whole files. It registers no range formatter on purpose: asking a formatter for a
+range and getting the whole document back is how **Format Selection** quietly reformats work outside
+the selection.
+
+## Configuration lives in your repo, not your editor
+
+There is exactly one extension setting, `maxdop.path`, for pointing at a different binary.
+
+Everything about *how* code is formatted goes in a `.maxdop.json` file at your repo root, so the
+whole team formats identically whether they use VS Code, the CLI, or CI:
+
+```jsonc
+{
+  "maxWidth": 100,
+  "indentSize": 4,
+  "keywordCase": "upper",
+  "leadingCommas": false,
+  "alwaysBreakWhere": false,
+  "parserVersion": "2019",
+  "exclude": ["db/generated/**", "*.gen.sql"]
+}
+```
+
+The nearest `.maxdop.json` at or above the file being formatted wins. `editor.tabSize` and friends
+are deliberately ignored — a file should not format differently because of who opened it.
+
+`parserVersion` pins the grammar, so a 2019-target codebase is not silently reformatted under 2025
+rules. The [full option list](https://github.com/pagebrooks/maxdop#configuration) is in the project
+README.
+
+## The same formatter runs in your pipeline
+
+The binary inside this extension is the one you can put in CI. `maxdop --check src/` exits nonzero
+if anything would change, which is what turns a shared style into an enforced one — an editor
+formatter alone can only ask nicely.
+
+```sh
+maxdop --check src/                                   # fail the build if anything would change
+git diff --name-only -z | maxdop --check --files-from -   # or only what changed
+```
+
+Download it from [releases](https://github.com/pagebrooks/maxdop/releases). It is one static
+executable with no .NET runtime, for Windows, macOS, Linux and Alpine, x64 and arm64.
 
 ## Using this alongside the mssql extension
 
@@ -58,32 +103,5 @@ mssql, set it explicitly:
 Either way, **maxdop: Format Document** in the Command Palette always formats with maxdop, so you can
 keep mssql on format-on-save and still reach for this one deliberately (it takes a keybinding).
 
-Selections are the one thing to know about: maxdop deliberately ships no range formatter, so
-**Format Selection** falls through to mssql's, whichever default you pick.
-
-## Configuration lives in your repo, not your editor
-
-There is exactly one extension setting, `maxdop.path`, for pointing at a different binary.
-
-Everything about *how* code is formatted goes in a `.maxdop.json` file at your repo root, so the
-whole team formats identically whether they use VS Code, the CLI, or CI:
-
-```jsonc
-{
-  "maxWidth": 100,
-  "indentSize": 4,
-  "keywordCase": "upper",
-  "leadingCommas": false,
-  "alwaysBreakWhere": false,
-  "parserVersion": 2019
-}
-```
-
-The nearest `.maxdop.json` at or above the file being formatted wins. `editor.tabSize` and friends
-are deliberately ignored — a file should not format differently because of who opened it.
-
-## Format Selection is not supported, on purpose
-
-maxdop formats whole files. Asking a formatter for a range and getting the whole document back is
-how "Format Selection" quietly reformats work outside the selection, so this extension registers no
-range formatter rather than pretending.
+Selections are the one thing to know about: because maxdop ships no range formatter, **Format
+Selection** falls through to mssql's, whichever default you pick.
