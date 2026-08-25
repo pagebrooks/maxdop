@@ -178,6 +178,7 @@ One static executable. No .NET runtime, no Node, no installer, nothing fetched o
 
 | | |
 | --- | --- |
+| **Homebrew** (macOS, Linux) | `brew install pagebrooks/tap/maxdop` |
 | **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
 | **pip / uv** (any platform) | `pip install maxdop`<br>`uvx maxdop --check src/` |
 

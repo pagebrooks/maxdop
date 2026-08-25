@@ -14,8 +14,12 @@
 class Maxdop < Formula
   desc "T-SQL formatter that runs in CI and verifies its own output"
   homepage "https://github.com/pagebrooks/maxdop"
-  version "0.1.1"
   license "MIT"
+
+  livecheck do
+    url :stable
+    strategy :github_latest
+  end
 
   on_macos do
     on_arm do
@@ -39,11 +43,6 @@ class Maxdop < Formula
       url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.1/maxdop-0.1.1-linux-x64.tar.gz"
       sha256 "d3d6b29f514b60b8f4e86184ddc4a400055b924523a92fd7d20213fc366742cd"
     end
-  end
-
-  livecheck do
-    url :stable
-    strategy :github_latest
   end
 
   def install
