@@ -29,12 +29,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # winget is not on the runner image. It ships with App Installer, which is a Store package,
-      # and these are Windows Server SKUs without the Store — so it has to be installed first.
-      - name: Install winget
-        uses: Cyberboss/install-winget@6f566e9e227561d5d31e45d65f9b777b3fa8f56f # v1
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # winget used to need installing here: the Server 2022 image had no Store, so no App
+      # Installer. windows-latest is Server 2025 now and ships winget, so the bootstrap action is
+      # gone — it broke on exactly that. Its "simple setup" path runs `winget upgrade winget`, and
+      # winget exits non-zero when an upgrade needs a restart to finish, so a successful upgrade
+      # failed the job and skipped every check below it.
+      #
+      # Assert it rather than assume it, so a future image that drops winget says so plainly
+      # instead of failing later with something that reads like a manifest problem.
+      - name: winget is on the runner
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Error "winget is not on this runner image; this job needs it installed again"
+            exit 1
+          }
+          winget --version
 
       - name: Validate the manifests
         shell: pwsh

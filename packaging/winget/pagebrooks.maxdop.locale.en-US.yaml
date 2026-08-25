@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: pagebrooks.maxdop
-PackageVersion: 0.1.0
+PackageVersion: 0.1.1
 PackageLocale: en-US
 Publisher: Page Brooks
 PublisherUrl: https://github.com/pagebrooks
@@ -34,7 +34,7 @@ Tags:
   - sqlserver
   - t-sql
   - tsql
-ReleaseNotesUrl: https://github.com/pagebrooks/maxdop/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/pagebrooks/maxdop/releases/tag/v0.1.1
 Documentations:
   - DocumentLabel: CLI reference
     DocumentUrl: https://github.com/pagebrooks/maxdop/blob/main/docs/cli.md
