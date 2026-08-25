@@ -72,8 +72,22 @@ easy to get wrong by hand, and both were wrong here first:
 
 - **`RelativeFilePath` uses forward slashes**, not the backslashes Windows paths suggest. Accepted
   manifests such as `sharkdp/bat` do the same.
-- **`ReleaseDate` must be quoted.** Unquoted, YAML parses it as a date rather than a string and the
-  manifest fails schema validation.
+- **`ManifestVersion` must be the same in all three files, and must be a version winget-pkgs
+  currently accepts.** This is what got the 0.1.1 submission rejected: these files were written
+  against 1.6.0, komac regenerated the installer manifest at 1.12.0, and carried the other two
+  through untouched — so the set declared two different specification versions at once. Every file
+  validated on its own; the *set* did not. Check them together, never one at a time:
+
+  ```sh
+  grep -h '^ManifestVersion:' packaging/winget/*.yaml | sort -u   # must print exactly one line
+  ```
+
+The schema version moves. Before a submission, look at what a recently-merged package declares
+rather than trusting the number already in these files:
+
+```sh
+curl -s https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/j/junegunn/fzf/<version>/junegunn.fzf.installer.yaml | grep ManifestVersion
+```
 
 The schemas themselves are public, so the whole set can be validated anywhere:
 
