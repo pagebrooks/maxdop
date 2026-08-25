@@ -117,5 +117,9 @@ jobs:
         run: |
           # `if: always()` so a failure above still exercises this. An uninstall that leaves the shim
           # behind is a defect in the manifest too, and this is the only place it would show up.
-          winget uninstall --id pagebrooks.maxdop --disable-interactivity
-          Write-Host "uninstall exited $LASTEXITCODE"
+          # --accept-source-agreements for the same reason the install needs it: winget refuses to
+          # touch a machine whose msstore source agreement has not been accepted, and answers with
+          # -1978335162 rather than anything about this package. Without it the teardown failed on a
+          # run where the manifest was fine.
+          winget uninstall --id pagebrooks.maxdop --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget uninstall failed with $LASTEXITCODE" }
