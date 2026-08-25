@@ -179,6 +179,11 @@ One static executable. No .NET runtime, no Node, no installer, nothing fetched o
 | | |
 | --- | --- |
 | **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
+| **pip / uv** (any platform) | `pip install maxdop`<br>`uvx maxdop --check src/` |
+
+The [PyPI package](https://pypi.org/project/maxdop/) is the same static binary in a wheel — no Python
+runs when you format a file, and nothing is compiled on install. It is there because the people who
+write the most SQL often already have Python, not because maxdop needs it.
 
 More are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
 [`packaging/`](packaging/) is welcome.
@@ -191,7 +196,7 @@ Pick your platform from [the latest release](../../releases/latest) — `linux-x
 **macOS and Linux**
 
 ```sh
-V=0.1.0; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
+V=0.1.1; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
 
 curl -fsSLO "https://github.com/pagebrooks/maxdop/releases/download/v$V/maxdop-$V-$RID.tar.gz"
 tar -xzf "maxdop-$V-$RID.tar.gz"
@@ -224,6 +229,20 @@ the binary for your platform, so it needs none of the above. Neovim works throug
 a command works too — the whole interface is stdin in, stdout out, exit code back.
 
 [Editor setup →](docs/editors.md)
+
+### In pre-commit
+
+```yaml
+repos:
+  - repo: https://github.com/pagebrooks/maxdop
+    rev: v0.1.1
+    hooks:
+      - id: maxdop          # rewrites files, then fails so you re-stage
+      - id: maxdop-check    # fails without touching anything
+```
+
+pre-commit installs the binary itself, so nobody on the team has to have maxdop already. Exclusions
+still come from `.maxdop.json`, not from the hook.
 
 ## Use
 
