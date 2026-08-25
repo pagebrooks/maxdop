@@ -170,9 +170,19 @@ formatted once per configuration option:
 
 ---
 
-## Install
+## Installation
 
-One static executable. No .NET runtime, no Node, no installer, nothing fetched on first run.
+Maxdop is compiled as one static executable. No additional runtimes (.NET, Node, etc) are needed.
+
+## In an editor
+
+The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles
+the binary for your platform, so it needs none of the above. Neovim works through
+[conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
+a command works too — the whole interface is stdin in, stdout out, exit code back.
+
+[Editor setup instructions →](docs/editors.md)
+
 
 ### Package managers
 
@@ -182,14 +192,13 @@ One static executable. No .NET runtime, no Node, no installer, nothing fetched o
 | **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
 | **pip / uv** (any platform) | `pip install maxdop`<br>`uvx maxdop --check src/` |
 
-The [PyPI package](https://pypi.org/project/maxdop/) is the same static binary in a wheel — no Python
-runs when you format a file, and nothing is compiled on install. It is there because the people who
-write the most SQL often already have Python, not because maxdop needs it.
+The [PyPI package](https://pypi.org/project/maxdop/) is the same static binary in a wheel, no Python
+runs when you format a file.
 
-More are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
+**Note:** Support for more package mamanagers are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
 [`packaging/`](packaging/) is welcome.
 
-### Download it yourself
+### Manual Install
 
 Pick your platform from [the latest release](../../releases/latest) — `linux-x64`, `linux-arm64`,
 `linux-musl-x64` (Alpine), `osx-x64`, `osx-arm64`, `win-x64` or `win-arm64`.
@@ -204,17 +213,16 @@ tar -xzf "maxdop-$V-$RID.tar.gz"
 sudo install "maxdop-$V-$RID/maxdop" /usr/local/bin/
 ```
 
-**Windows** — download `maxdop-<version>-win-x64.zip` (or `win-arm64`), extract it, and put
+**Windows** 
+
+Download `maxdop-<version>-win-x64.zip` (or `win-arm64`), extract it, and put
 `maxdop.exe` somewhere on your `PATH`.
 
-<sub>The archives are unsigned, so macOS Gatekeeper and Windows SmartScreen warn on a direct
-download. Installing through a package manager or the VS Code extension avoids that.</sub>
+**Checksums**
 
-### Verify what you downloaded
-
-Every archive carries [build provenance](https://github.com/actions/attest-build-provenance) — proof
+Every archive carries [build provenance](https://github.com/actions/attest-build-provenance), proof
 that these exact bytes came out of this repository's release workflow, which a checksum alone cannot
-give you, since anyone who could replace the binaries could rewrite `SHA256SUMS` beside them.
+give you.
 
 ```sh
 gh attestation verify "maxdop-$V-$RID.tar.gz" --repo pagebrooks/maxdop
@@ -222,30 +230,7 @@ gh attestation verify "maxdop-$V-$RID.tar.gz" --repo pagebrooks/maxdop
 
 `SHA256SUMS` is attached to every release as well.
 
-### In an editor
-
-The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles
-the binary for your platform, so it needs none of the above. Neovim works through
-[conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
-a command works too — the whole interface is stdin in, stdout out, exit code back.
-
-[Editor setup →](docs/editors.md)
-
-### In pre-commit
-
-```yaml
-repos:
-  - repo: https://github.com/pagebrooks/maxdop
-    rev: v0.1.1
-    hooks:
-      - id: maxdop          # rewrites files, then fails so you re-stage
-      - id: maxdop-check    # fails without touching anything
-```
-
-pre-commit installs the binary itself, so nobody on the team has to have maxdop already. Exclusions
-still come from `.maxdop.json`, not from the hook.
-
-## Use
+## CLI Usage
 
 ![maxdop formatting a stored procedure at the command line, then gating it with --check](docs/images/demo.gif)
 
@@ -261,6 +246,21 @@ maxdop --write-baseline src/                              # adopt on a codebase 
 ```
 
 [Exit codes and CLI reference →](docs/cli.md)
+
+### Pre-commit Usage
+
+```yaml
+repos:
+  - repo: https://github.com/pagebrooks/maxdop
+    rev: v0.1.1
+    hooks:
+      - id: maxdop          # rewrites files, then fails so you re-stage
+      - id: maxdop-check    # fails without touching anything
+```
+
+pre-commit installs the binary itself, so nobody on the team has to have maxdop already. Exclusions
+still come from `.maxdop.json`, not from the hook.
+
 
 ## Configuration
 
@@ -298,5 +298,5 @@ it.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). All of it, including the CLI and using it in CI. ScriptDom is MIT and
+MIT see [LICENSE](LICENSE). ScriptDom is MIT and
 used as a NuGet dependency.
