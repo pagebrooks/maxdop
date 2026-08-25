@@ -121,5 +121,13 @@ jobs:
           # touch a machine whose msstore source agreement has not been accepted, and answers with
           # -1978335162 rather than anything about this package. Without it the teardown failed on a
           # run where the manifest was fine.
-          winget uninstall --id pagebrooks.maxdop --accept-source-agreements --disable-interactivity
+          # What winget thinks is installed, first: if the uninstall below cannot find the package,
+          # this is the line that says what it is actually registered as.
+          winget list --id pagebrooks.maxdop --accept-source-agreements
+          Write-Host "list exited $LASTEXITCODE"
+
+          # By manifest, not by --id. The package was installed from a local manifest and so exists
+          # in no configured source; resolving --id against the sources returns -1978335212, "no
+          # installed package found", on a machine where it is plainly installed and working.
+          winget uninstall --manifest packaging\winget --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE -ne 0) { throw "winget uninstall failed with $LASTEXITCODE" }
