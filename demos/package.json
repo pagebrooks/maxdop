@@ -9,7 +9,11 @@
     "card": "node social-card.mjs",
     "card:check": "node social-card.mjs --check",
     "terminal": "node terminal/render.mjs",
-    "terminal:check": "node terminal/render.mjs --check"
+    "terminal:check": "node terminal/render.mjs --check",
+    "nvim": "node nvim/render.mjs",
+    "nvim:check": "node nvim/render.mjs --check",
+    "helix": "node helix/render.mjs",
+    "helix:check": "node helix/render.mjs --check"
   },
   "keywords": [],
   "author": "",

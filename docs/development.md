@@ -23,6 +23,8 @@ pipeline build cannot drift.
 | `editors/vscode/` | The VS Code extension; the binary is embedded, nothing is downloaded |
 | `demos/` | Generates the before/after image in the README from the real binary |
 | `demos/terminal/` | Records the terminal demo — `docs/images/demo.gif` and `demo.png` — with VHS |
+| `demos/nvim/` | Records the format-on-save demo — `docs/images/nvim.gif` and `nvim.png` — with VHS |
+| `demos/helix/` | Records the Helix demo — `docs/images/helix.gif` and `helix.png` — with VHS |
 | `tools/Maxdop.Corpus/` | Dev harness that measures coverage, per option, and ranks what to build next |
 | `packaging/` | Manifests for Scoop, WinGet and mason, plus how each is submitted |
 | `mise.toml` | Pinned toolchain — `mise install` and you have it |
@@ -37,7 +39,24 @@ no longer produces.
 cd demos
 npm run generate         # the before/after still, via shiki + resvg
 npm run terminal         # the terminal recording, via VHS — needs vhs, ttyd, ffmpeg
+npm run nvim             # the format-on-save recording — also needs nvim
+npm run helix            # the Helix recording — also needs hx
 ```
+
+The Neovim and Helix demos share `demos/terminal/before.sql` and `after.sql` rather than keeping
+their own copies, so all three recordings show the same input becoming the same output. That also
+means `npm run terminal:check` already covers them, and there are deliberately no `nvim:check` or
+`helix:check` steps in CI — they would assert the same thing three times.
+
+Both editor demos take their configuration out of `docs/editors.md` at record time — the Neovim
+keymap from the Lua block, Helix's `languages.toml` from the TOML block — so a recording can only
+show config the documentation actually publishes, and renaming those sections fails the script.
+
+Environment variables exist for those recordings. `CONFORM_NVIM` points at a conform.nvim checkout so
+the Neovim one can be made offline, `HELIX_BINARY` pins Helix, and `NVIM_BINARY` pins Neovim. The second is not a convenience:
+conform's synchronous format-on-save calls `vim.wait` with a fractional timeout, and a Neovim strict
+enough to reject that errors in `BufWritePre` and writes the file **unformatted**. Recording against
+an unpinned nightly is how this GIF ends up showing a formatter that did nothing.
 
 `npm run check` and `npm run terminal:check` are the CI halves. They format the sample input with the
 real binary and compare it against a committed snapshot, which costs seconds and needs none of the

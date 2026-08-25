@@ -1,0 +1,12 @@
+# Editor settings for the recording only. The formatter configuration is not here:
+# render.mjs writes languages.toml from the block in docs/editors.md, so the demo
+# can only show config the documentation actually publishes.
+
+[editor]
+# Helix does not soft-wrap by default, and the unformatted fixture has a
+# 105-character line. Without this the "before" half scrolls sideways and the
+# viewer sees a fragment of the mess rather than the shape of it.
+soft-wrap.enable = true
+
+[editor.statusline]
+left = ["mode", "file-name"]
