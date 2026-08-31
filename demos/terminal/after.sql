@@ -4,10 +4,10 @@ BEGIN
     SET NOCOUNT ON;
     SELECT TOP 10
         r.RepName,
-        sum(o.Total) AS Revenue,
+        SUM(o.Total) AS Revenue,
         CASE
-            WHEN sum(o.Total) > 100000 THEN 'gold'
-            WHEN sum(o.Total) > 50000 THEN 'silver'
+            WHEN SUM(o.Total) > 100000 THEN 'gold'
+            WHEN SUM(o.Total) > 50000 THEN 'silver'
             ELSE 'bronze'
         END AS Tier
     FROM dbo.Orders o
