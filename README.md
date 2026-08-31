@@ -229,11 +229,13 @@ maxdop --check src/             # exit 1 if anything would change
 maxdop --parser-version 2016    # pin the grammar
 cat query.sql | maxdop          # stdin to stdout, how editors call it
 
-git diff --name-only -z | maxdop --check --files-from -   # only what changed, no git dependency
+git diff --name-only --diff-filter=ACM -z | maxdop --check --files-from -   # only what changed
 maxdop --write-baseline src/                              # adopt on a codebase already written
 ```
 
 [Exit codes and CLI reference →](docs/cli.md)
+
+[Setting this up in CI →](docs/ci.md)
 
 ### Pre-commit Usage
 
@@ -293,6 +295,7 @@ it.
 | [Safety](docs/safety.md) | Safety guarantees made by maxdop |
 | [Comparison](docs/comparison.md) | Comparison of maxdop against other formatters |
 | [CLI](docs/cli.md) | Flags, exit codes, grammar versioning, migration scripts |
+| [CI](docs/ci.md) | Gating a pull request with `--check`, on GitHub Actions and elsewhere |
 | [Editors](docs/editors.md) | VS Code, Neovim, plain Vim, Helix |
 | [Development](docs/development.md) | Repo layout and building from source |
 

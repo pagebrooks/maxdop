@@ -79,7 +79,7 @@ formatter alone can only ask nicely.
 
 ```sh
 maxdop --check src/                                   # fail the build if anything would change
-git diff --name-only -z | maxdop --check --files-from -   # or only what changed
+git diff --name-only --diff-filter=ACM -z | maxdop --check --files-from -   # or only what changed
 ```
 
 Download it from [releases](https://github.com/pagebrooks/maxdop/releases). It is one static

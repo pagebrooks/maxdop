@@ -41,6 +41,15 @@ updates:
       - dependency-name: "@types/node"
         update-types: [version-update:semver-major]
 
+      # @types/vscode has to describe the API at the `engines.vscode` floor, not the newest VS Code
+      # published — the same argument as @types/node above, but with a sharper failure. vsce refuses
+      # to package at all when the types are ahead of the engine ("@types/vscode ^1.134.0 greater
+      # than engines.vscode ^1.90.0"), so a routine bump here breaks the release build rather than
+      # merely describing APIs that are absent at runtime. Every update is ignored, not just majors:
+      # VS Code ships a minor a month, so minors are exactly the ones that break it. Raise this by
+      # hand, together with `engines.vscode`, when the supported floor moves.
+      - dependency-name: "@types/vscode"
+
       # TypeScript majors are migrations, not updates. 7.0 rewrote module and type resolution: on
       # this project it could not find @types/node at all and produced 30-odd errors from a tsconfig
       # that had not changed. Worth doing deliberately, with time to fix the config.
