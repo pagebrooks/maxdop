@@ -362,8 +362,12 @@ jobs:
             wheel_version="${VERSION%%-*}"
           fi
 
+          # --archive-version is the untrimmed one: the build job names its archives with the
+          # full version, so on a dispatch run they are maxdop-0.0.0-ci.<run>-<rid>.tar.gz while
+          # the wheels have to be stamped 0.0.0. On a tag the two are identical and this is inert.
           python3 packaging/pypi/build_wheels.py \
-            --version "$wheel_version" --archives archives --out wheels
+            --version "$wheel_version" --archive-version "$VERSION" \
+            --archives archives --out wheels
 
           cd wheels
           for f in *.whl; do sha256sum "$f" > "$f.sha256"; done
@@ -439,8 +443,13 @@ jobs:
     # a public storefront, a published version can be unpublished but not replaced, and no
     # workflow can tell you the page reads badly. Once the listing is right, set the
     # variable and this takes over every subsequent tag.
+    # Gated on `release` as well as on what it publishes. Publishing here is the step that cannot
+    # be taken back — a version can be unpublished or yanked, never replaced — while cutting the
+    # GitHub Release is the recoverable one. Running them in parallel meant a transient failure in
+    # the recoverable step could leave a version live here with no Release behind it, so the
+    # irreversible half waits for the reversible half to succeed. The cost is wall-clock.
     name: marketplace
-    needs: [version, vsix]
+    needs: [version, vsix, release]
     if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_MARKETPLACE == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -484,8 +493,13 @@ jobs:
     # No token. PyPI verifies an OIDC token minted for this repository, this
     # workflow file and this environment, so all three must match the publisher
     # registered at pypi.org/manage/project/maxdop/settings/publishing.
+    # Gated on `release` as well as on what it publishes. Publishing here is the step that cannot
+    # be taken back — a version can be unpublished or yanked, never replaced — while cutting the
+    # GitHub Release is the recoverable one. Running them in parallel meant a transient failure in
+    # the recoverable step could leave a version live here with no Release behind it, so the
+    # irreversible half waits for the reversible half to succeed. The cost is wall-clock.
     name: pypi
-    needs: [version, wheels]
+    needs: [version, wheels, release]
     if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_PYPI == 'true' }}
     runs-on: ubuntu-latest
     environment: pypi

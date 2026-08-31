@@ -115,6 +115,14 @@ def platform_tag(p: Payload) -> str:
 
 
 def read_archives(directory: Path, version: str) -> list[Payload]:
+    """
+    Reads one binary per platform out of the release archives.
+
+    `version` names the *archives*, which is not always the version the wheels
+    get. A dispatch run builds `0.0.0-ci.<run>` archives but has to produce PEP
+    440 wheels, so the caller trims the version for the wheel and passes the
+    untrimmed one here.
+    """
     payloads = []
     for rid in ARCH:
         exe = "maxdop.exe" if rid.startswith("win-") else "maxdop"
@@ -207,7 +215,13 @@ def build(p: Payload, version: str, readme: str, license_text: str, out: Path) -
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", required=True)
+    ap.add_argument("--version", required=True, help="the version the wheels are stamped with")
+    ap.add_argument(
+        "--archive-version",
+        help="the version in the archive filenames, when it differs from --version. "
+        "A dispatch run names its archives 0.0.0-ci.<run> but must stamp wheels 0.0.0, "
+        "because a wheel filename has to be PEP 440.",
+    )
     ap.add_argument("--archives", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=Path("wheels"))
     args = ap.parse_args()
@@ -216,7 +230,7 @@ def main() -> None:
     readme = (here / "README.md").read_text()
     license_text = (here.parent.parent / "LICENSE").read_text()
 
-    for p in read_archives(args.archives, args.version):
+    for p in read_archives(args.archives, args.archive_version or args.version):
         path = build(p, args.version, readme, license_text, args.out)
         print(f"{path.name}  {path.stat().st_size / 1_048_576:.1f} MB")
 
