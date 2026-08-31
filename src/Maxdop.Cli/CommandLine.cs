@@ -289,8 +289,14 @@ internal sealed record CommandLine
         CONFIG
           The nearest .maxdop.json at or above the file being formatted wins. Keys:
           maxWidth, indentSize, useTabs, keywordCase ("upper"|"lower"), leadingCommas,
-          alwaysBreakSelectList, alwaysBreakWhere, maxBlankLines, parserVersion,
-          initialQuotedIdentifiers, exclude.
+          recaseBuiltInFunctions, alwaysBreakSelectList, alwaysBreakWhere, maxBlankLines,
+          parserVersion, initialQuotedIdentifiers, exclude.
+
+          "recaseBuiltInFunctions" (default true) gives built-in function names and
+          global variables the configured keyword case: `getdate()` becomes `GETDATE()`,
+          `@@rowcount` becomes `@@ROWCOUNT`. Only unqualified, undelimited calls are
+          touched, never `dbo.MyFunc(...)` or `[len](...)`, and only documented global
+          variables, never your own `DECLARE @@MyVar`.
 
           "exclude" is a list of globs, relative to the config file's own directory:
             { "exclude": ["db/generated/**", "*.gen.sql", "vendor/"] }

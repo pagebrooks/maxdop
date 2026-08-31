@@ -34,6 +34,9 @@ internal sealed record MaxdopConfig
     [JsonPropertyName("leadingCommas")]
     public bool? LeadingCommas { get; init; }
 
+    [JsonPropertyName("recaseBuiltInFunctions")]
+    public bool? RecaseBuiltInFunctions { get; init; }
+
     [JsonPropertyName("alwaysBreakSelectList")]
     public bool? AlwaysBreakSelectList { get; init; }
 
@@ -126,6 +129,7 @@ internal sealed record MaxdopConfig
             },
             KeywordCase = keywordCase,
             LeadingCommas = LeadingCommas ?? baseline.LeadingCommas,
+            RecaseBuiltInFunctions = RecaseBuiltInFunctions ?? baseline.RecaseBuiltInFunctions,
             AlwaysBreakSelectList = AlwaysBreakSelectList ?? baseline.AlwaysBreakSelectList,
             AlwaysBreakWhere = AlwaysBreakWhere ?? baseline.AlwaysBreakWhere,
             MaxBlankLines = MaxBlankLines ?? baseline.MaxBlankLines,

@@ -75,6 +75,83 @@ public class CallFormattingTests
                 maxWidth: 50));
     }
 
+    // --- WITHIN GROUP -------------------------------------------------------------------
+
+    [Theory]
+    // The bug this handler was written for. `WITHIN GROUP` used to reach the output through the slice
+    // taken after the closing parenthesis, which recases no identifier — so reserved `GROUP` came up
+    // and non-reserved `WITHIN` did not, giving `within GROUP (ORDER BY b)`.
+    [InlineData(
+        "select string_agg(a, ',') within group (order by b) from t;",
+        "SELECT STRING_AGG(a, ',') WITHIN GROUP (ORDER BY b) FROM t;")]
+    [InlineData(
+        "select string_agg(a, ',') WITHIN GROUP (ORDER BY b) from t;",
+        "SELECT STRING_AGG(a, ',') WITHIN GROUP (ORDER BY b) FROM t;")]
+    // Argument spacing inside the ordering is normalised like any other ORDER BY, and the direction
+    // keyword comes up with it.
+    [InlineData(
+        "select string_agg(a, ',') within group (order by b desc,c) from t;",
+        "SELECT STRING_AGG(a, ',') WITHIN GROUP (ORDER BY b DESC, c) FROM t;")]
+    public void WithinGroupIsRecasedAsOneClause(string input, string expected)
+    {
+        Assert.Equal(expected, Format(input));
+    }
+
+    [Fact]
+    public void WithinGroupAndOverAppearInWrittenOrder()
+    {
+        // Both trailing clauses at once, which is why they are collected and sorted by token index
+        // rather than emitted in a fixed order.
+        Assert.Equal(
+            "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x DESC) OVER (PARTITION BY g) FROM t;",
+            Format("select percentile_cont(0.5) within group (order by x desc) over (partition by g) from t;"));
+    }
+
+    [Fact]
+    public void CollationAfterACallStillKeepsItsName()
+    {
+        // The reason the fix had to be structural. A COLLATE shares the region WITHIN GROUP used to be
+        // emitted from, and a collation name is a name — so recasing that whole region to fix the
+        // casing of `WITHIN` would have renamed the collation. `WithinGroupClause` is a node and the
+        // collation is not, which is exactly the distinction the printer acts on.
+        Assert.Equal(
+            "SELECT RTRIM(z) COLLATE Latin1_General_BIN FROM t;",
+            Format("select rtrim(z) collate Latin1_General_BIN from t;"));
+    }
+
+    [Fact]
+    public void LongWithinGroupBreaksAtItsOwnParenthesis()
+    {
+        // Same layout as OVER: the clause is a group of its own, so pressure breaks the construct
+        // rather than falling through to the ORDER BY list inside it.
+        Assert.Equal(
+            """
+            SELECT
+                STRING_AGG(SomeVeryLongColumnName, ', ') WITHIN GROUP (
+                    ORDER BY AnotherLongColumnName DESC, ThirdColumnName
+                ) AS Grouped
+            FROM t;
+            """,
+            Format(
+                "select string_agg(SomeVeryLongColumnName, ', ') within group "
+                + "(order by AnotherLongColumnName desc, ThirdColumnName) as Grouped from t;",
+                maxWidth: 80));
+    }
+
+    [Fact]
+    public void GraphPathWithinGroupIsDeclinedRatherThanModelled()
+    {
+        // `WITHIN GROUP (GRAPH PATH)` is a different construct wearing the same two words, and it
+        // carries no ORDER BY. Left verbatim rather than guessed at — the file still formats.
+        var formatted = Format(
+            "select last_value(n2.name) within group (graph path) as p "
+            + "from Person as n1, friend for path as e, Person for path as n2 "
+            + "where match(shortest_path(n1(-(e)->n2)+));");
+
+        // Verbatim, casing included: the clause was declined, so nothing in it was claimed.
+        Assert.Contains("within group (graph path)", formatted, StringComparison.Ordinal);
+    }
+
     // --- call targets -----------------------------------------------------------------
 
     [Fact]

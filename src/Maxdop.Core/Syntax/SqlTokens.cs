@@ -76,6 +76,22 @@ internal static class SqlTokens
         or TSqlTokenType.Money
         or TSqlTokenType.HexLiteral;
 
+    /// <summary>
+    /// Whether a token is a <c>@@</c>-prefixed global variable — <c>@@ROWCOUNT</c>, <c>@@SPID</c>.
+    /// </summary>
+    /// <remarks>
+    /// The second token type a keyword claim may land on, and the only one besides
+    /// <see cref="TSqlTokenType.Identifier"/>. Shared by the printer and the verifier for the same
+    /// reason <see cref="CarriesValue"/> is: if the two disagreed about what a claim may cover, the
+    /// printer would recase a token the verifier then rejects.
+    /// <para>Note what this does <em>not</em> say. A <c>@@</c> prefix makes a token eligible to be
+    /// claimed; it does not make it a system variable, because <c>DECLARE @@MyVar INT</c> is legal
+    /// T-SQL. Deciding that is <see cref="SqlGlobalVariables"/>' job, and the printer does it before
+    /// claiming anything.</para>
+    /// </remarks>
+    internal static bool IsGlobalVariable(this TSqlParserToken token) =>
+        token is { TokenType: TSqlTokenType.Variable, Text: ['@', '@', ..] };
+
     internal static int CountNewLines(string? text)
     {
         if (string.IsNullOrEmpty(text))

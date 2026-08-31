@@ -18,9 +18,9 @@ delimiters, and 2000-era legacy syntax.
 
 ## Safety Measures
 
-1. **It cannot break your code.** Every format re-parses its own output and compares the token
-   stream, the tree and the comments against the input. On any mismatch you get your original text
-   back, untouched.
+1. **It cannot break your code.** Every format re-parses its own output and compares its significant
+   token stream against the input's, with a second check for the comments. Identical tokens mean an
+   identical parse tree. On any mismatch you get your original text back, untouched.
 2. **It never destroys a file.** Constructs the formatter doesn't handle are emitted verbatim. A
    file that fails to parse is left exactly as it was, with the reason in the **maxdop** output
    channel.
@@ -57,6 +57,7 @@ whole team formats identically whether they use VS Code, the CLI, or CI:
   "indentSize": 4,
   "keywordCase": "upper",
   "leadingCommas": false,
+  "recaseBuiltInFunctions": true,
   "alwaysBreakWhere": false,
   "parserVersion": "2019",
   "exclude": ["db/generated/**", "*.gen.sql"]

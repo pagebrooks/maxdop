@@ -581,6 +581,8 @@ public sealed partial class SqlPrinter
         ScalarSubquery subquery => PrintScalarSubquery(subquery),
         CaseExpression caseExpression => PrintCase(caseExpression),
         WhenClause whenClause => PrintWhenClause(whenClause),
+        GlobalVariableExpression global => PrintGlobalVariable(global),
+        WithinGroupClause withinGroup => PrintWithinGroup(withinGroup),
 
         // Identifiers, literals and variable references are deliberately absent: passthrough
         // reproduces their text exactly, including bracket quoting, `N'…'` prefixes and numeric
@@ -1811,6 +1813,13 @@ public sealed partial class SqlPrinter
     private Doc CasedTokens(int fromIndex, int toIndex) => Slice(fromIndex, toIndex, pureKeywords: false);
 
     /// <summary>
+    /// A range the parser has already proved to be a built-in callee's name: a keyword slice when
+    /// <see cref="FormatOptions.RecaseBuiltInFunctions"/> is on, the author's text when it is off.
+    /// </summary>
+    private Doc CasedOrKeyword(int fromIndex, int toIndex) =>
+        Slice(fromIndex, toIndex, pureKeywords: _options.RecaseBuiltInFunctions);
+
+    /// <summary>
     /// Emits a token range that is <em>known to contain no object names</em>, recasing the
     /// non-reserved words in it as the keywords they are.
     /// </summary>
@@ -1953,6 +1962,11 @@ public sealed partial class SqlPrinter
 
             var text = token.Text ?? string.Empty;
             var isIdentifier = token.TokenType == TSqlTokenType.Identifier;
+
+            // The one other token type a claim may cover. `@@ROWCOUNT` lexes as a Variable, so the
+            // identifier rule below would leave it — and only the handler that put it in a keyword
+            // region knows it is a system variable rather than someone's `DECLARE @@MyVar`.
+            var isGlobalVariable = token.IsGlobalVariable();
             var keywordPosition = pureKeywords || (extraKeywordPositions?.Contains(i) ?? false);
 
             if (_passthroughSink is not null && isIdentifier && !keywordPosition)
@@ -1963,13 +1977,14 @@ public sealed partial class SqlPrinter
                 KeywordSliceIdentifiers[text] = seen + 1;
             }
 
-            // A pure-keyword region recases identifiers too — but only identifiers. String literals,
-            // quoted identifiers, variables and numbers keep their exact text even here, because
-            // `EXECUTE AS 'user'` and `[My Column]` are data whatever region they sit in.
+            // A pure-keyword region recases identifiers and `@@` variables — and nothing else. String
+            // literals, quoted identifiers, local variables and numbers keep their exact text even
+            // here, because `EXECUTE AS 'user'` and `[My Column]` are data whatever region they sit in.
             var recase = !preserveCase
-                && (!token.TokenType.CarriesValue() || (keywordPosition && isIdentifier));
+                && (!token.TokenType.CarriesValue()
+                    || (keywordPosition && (isIdentifier || isGlobalVariable)));
 
-            if (recase && isIdentifier)
+            if (recase && (isIdentifier || isGlobalVariable))
             {
                 _keywordCasedTokens.Add(i);
             }

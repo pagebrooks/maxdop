@@ -4,7 +4,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     WITH sales AS (
-        SELECT r.RepId, r.RepName, sum(o.Total) AS Revenue
+        SELECT r.RepId, r.RepName, SUM(o.Total) AS Revenue
         FROM dbo.Orders o
         JOIN dbo.Reps r ON r.RepId = o.RepId
         WHERE o.OrderDate >= @Start AND o.OrderDate < @End AND o.Status <> 'cancelled'
@@ -13,7 +13,7 @@ BEGIN
     SELECT
         s.RepName,
         s.Revenue,
-        sum(s.Revenue) OVER (ORDER BY s.Revenue DESC ROWS UNBOUNDED PRECEDING) AS RunningTotal,
+        SUM(s.Revenue) OVER (ORDER BY s.Revenue DESC ROWS UNBOUNDED PRECEDING) AS RunningTotal,
         CASE
             WHEN s.Revenue > 100000 THEN 'A'
             WHEN s.Revenue > 50000 THEN 'B'

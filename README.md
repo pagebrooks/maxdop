@@ -2,9 +2,11 @@
 
 # maxdop — Max Degree of Prettiness for your T-SQL
 
-**A T-SQL formatter that runs in CI, understands the whole language, and checks its own work.**
+**A T-SQL formatter that runs in both **Text Editors and CI**, understands the whole language, and checks its own work.**
 
-One static binary. No runtime to install. The formatter is free and MIT — all of it.
+* One static binary. 
+* No runtime to install. 
+* The formatter is free and MIT licensed, all of it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/before-after-dark.png">
@@ -26,9 +28,9 @@ Style lives in a `.maxdop.json` at your repo root, so the team agrees once inste
 
 ## Why not the formatter you already have?
 
-### 1. Most SQL formatters never parse your SQL
+### 1. Parsing vs. Tokenization 
 
-They split it into tokens and guess. That works until the shape of the code matters. These are real
+Most SQL formatters never parse your SQL. They split it into tokens and guess. That works until the shape of the code matters. These are real
 outputs:
 
 <table>
@@ -110,13 +112,12 @@ SELECT 'a' || 'b';
 </table>
 
 maxdop is built on [ScriptDom](https://github.com/microsoft/sqlscriptdom), Microsoft's own T-SQL
-parser — the one behind DacFx and SQL database projects. Twelve grammars, SQL Server 2000 to 2025
-plus Fabric DW. It reads stored procedures, `GO` batches and 2000-era syntax the way the server does.
+parser. It includes twelve grammars, SQL Server 2000 to 2025
+plus Fabric DW. It reads stored procedures, `GO` batches and syntax the way the server does.
 
 ### 2. Microsoft's formatters can't leave the editor
 
-maxdop shares its parser with Microsoft's own two formatters, so all three understand your code
-equally well. What differs is where you can run them:
+Microsoft's own formatters use ScriptDom, so they have the potential to understand and format your code equally well. However, there formatters are bundled in tightly into their products: 
 
 ```mermaid
 flowchart TD
@@ -127,7 +128,7 @@ flowchart TD
     SD --> SS["<b>SSMS 22 formatter</b><br/>preview"]
 
     MX --> MXS["wrapped in<br/><b>one native binary</b><br/>no runtime · ~3.5 ms cold start"]
-    MS --> MSS["wrapped in a<br/><b>292 MB .NET service</b><br/>requires .NET 10 on the machine"]
+    MS --> MSS["wrapped in a<br/><b>292 MB .NET service</b><br/>requires .NET 10"]
     SS --> SSS["wrapped in<br/><b>SSMS itself</b><br/>Windows only"]
 
     MXS --> MXU["<b>CLI</b> · --check in CI, pre-commit<br/><b>Editors</b> · VS Code, Neovim"]
@@ -138,48 +139,46 @@ flowchart TD
     class MX,MXS,MXU mine;
 ```
 
-<sub>Sizes and versions measured August 2026, and they will move — the shape of the diagram is the
-durable part, not the numbers in it.</sub>
+A formatter with no command line cannot gate a pull request. Style only becomes the team's style when something fails the build.
 
-A formatter with no command line cannot gate a pull request. Style only becomes the team's style
-when something fails the build.
+### 3. Self-verification
 
-Expect the *output* of all three to converge — same parser, same problems. Line breaks are not a
-durable argument. Reach is.
+maxdop re-parses what it produced and compares its significant token stream against your input's, token by token, with a second check for
+the comments. Identical tokens mean an identical parse tree, so this delivers tree equivalence rather than approximating it. If anything
+differs you get your original file back, untouched, and a distinct exit code.
 
-### 3. It checks its own work
 
-Every other formatter here hands you the result and trusts it. maxdop re-parses what it produced and
-compares the token stream, the tree and the comments against your input. If anything differs you get
-your original file back, untouched, and a distinct exit code.
+### 4. Validation
+maxdop has been measured against 2,215 real-world files including AdventureWorks, WideWorldImporters, the First Responder
+Kit, Ola Hallengren's Maintenance Solution, sp_WhoIsActive, and ScriptDom's own test suite (*formatted once per configuration option*).
 
-That is a stance about who carries the risk. A formatter that declines to format is a support ticket
-for a vendor and a promise kept for a linter.
-
-Measured against 2,215 real-world files — AdventureWorks and WideWorldImporters, the First Responder
-Kit, Ola Hallengren's Maintenance Solution, sp_WhoIsActive, and ScriptDom's own test suite —
-formatted once per configuration option:
-
-| | |
+|Test Results||
 | --- | --- |
 | Refused, crashed, or non-idempotent | **0**, in every variant |
-| Comments lost | **0** of 11,261 |
+| Comments lost | **0** of 11,385 |
 | Token coverage, corpus-wide | **98.6%** |
 
-[How that is measured →](docs/safety.md)
+[More about Safety and Validation →](docs/safety.md)
 
----
 
 ## Installation
 
-Maxdop is compiled as one static executable. No additional runtimes (.NET, Node, etc) are needed.
+Maxdop is compiled as one static executable and works across multiple platforms. No additional runtimes or platform support (.NET, Node, etc.) are needed. It can run inside a text editor as a formatter, as a standalone CLI tool, and it can run in a CI pipeline as a quality gate.
 
-## In an editor
+## In a Text Editor
 
-The [VS Code extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) bundles
-the binary for your platform, so it needs none of the above. Neovim works through
-[conform.nvim](https://github.com/stevearc/conform.nvim), and anything that can pipe a buffer through
-a command works too — the whole interface is stdin in, stdout out, exit code back.
+The following editors are tested and supported for formatting T-SQL.
+
+* **VS Code extension** - packaged as an [extension](https://marketplace.visualstudio.com/items?itemName=pbrooks.maxdop) which bundles
+the binary for your platform.
+
+* **Neovim** - through [conform.nvim](https://github.com/stevearc/conform.nvim).
+
+* **Helix** 
+
+* **Other Editors** - Any editor that can pipe a buffer through
+  a command works too — the whole interface is stdin in, stdout out, exit code back.
+
 
 [Editor setup instructions →](docs/editors.md)
 
@@ -206,7 +205,7 @@ Pick your platform from [the latest release](../../releases/latest) — `linux-x
 **macOS and Linux**
 
 ```sh
-V=0.1.1; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
+V=0.1.2; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
 
 curl -fsSLO "https://github.com/pagebrooks/maxdop/releases/download/v$V/maxdop-$V-$RID.tar.gz"
 tar -xzf "maxdop-$V-$RID.tar.gz"
@@ -218,17 +217,6 @@ sudo install "maxdop-$V-$RID/maxdop" /usr/local/bin/
 Download `maxdop-<version>-win-x64.zip` (or `win-arm64`), extract it, and put
 `maxdop.exe` somewhere on your `PATH`.
 
-**Checksums**
-
-Every archive carries [build provenance](https://github.com/actions/attest-build-provenance), proof
-that these exact bytes came out of this repository's release workflow, which a checksum alone cannot
-give you.
-
-```sh
-gh attestation verify "maxdop-$V-$RID.tar.gz" --repo pagebrooks/maxdop
-```
-
-`SHA256SUMS` is attached to every release as well.
 
 ## CLI Usage
 
@@ -252,7 +240,7 @@ maxdop --write-baseline src/                              # adopt on a codebase 
 ```yaml
 repos:
   - repo: https://github.com/pagebrooks/maxdop
-    rev: v0.1.1
+    rev: v0.1.2
     hooks:
       - id: maxdop          # rewrites files, then fails so you re-stage
       - id: maxdop-check    # fails without touching anything
@@ -264,8 +252,7 @@ still come from `.maxdop.json`, not from the hook.
 
 ## Configuration
 
-One `.maxdop.json` at the repo root, committed next to the code it formats. The nearest one at or
-above the file being formatted wins.
+One `.maxdop.json` at the repo root, committed next to the code it formats. The nearest one at or above the file being formatted wins.
 
 ```json
 {
@@ -274,6 +261,7 @@ above the file being formatted wins.
   "useTabs": false,
   "keywordCase": "upper",
   "leadingCommas": false,
+  "recaseBuiltInFunctions": true,
   "alwaysBreakSelectList": false,
   "alwaysBreakWhere": false,
   "maxBlankLines": 1,
@@ -282,6 +270,18 @@ above the file being formatted wins.
   "exclude": ["db/generated/**", "*.gen.sql"]
 }
 ```
+
+`recaseBuiltInFunctions` gives built-in function names and global variables the configured keyword
+case, so `getdate()` becomes `GETDATE()` and `@@rowcount` becomes `@@ROWCOUNT`. This is the one
+casing rule maxdop applies from a list of names rather than from the parse tree, so it is the one you
+can switch off — everywhere else, a word is recased only where the grammar proves it cannot be a
+name.
+
+Even on, it is narrow. Only an unqualified, undelimited call is touched: `dbo.MyFunc(...)`,
+`dbo.Len(...)` and `[len](...)` keep the casing you wrote, because SQL Server needs at least a
+two-part name to reach a function of yours. And only a documented global variable is touched — if you
+have a `DECLARE @@MyVar INT` (legal T-SQL, and indistinguishable from `@@ROWCOUNT` to the parser), it
+keeps every character you wrote.
 
 There are no editor-level formatting settings on purpose. A repo formats the same way whoever opens
 it.

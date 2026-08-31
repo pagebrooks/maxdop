@@ -80,10 +80,15 @@ public static class RoundTripVerifier
 
             var claimed = keywordPositions.Contains(indices[i]);
 
-            // A claim may only ever land on an identifier. If the printer has claimed a string
-            // literal or a quoted identifier, that is a printer bug and relaxing the comparison would
-            // hide it — so it fails here instead, loudly.
-            if (claimed && before[i].TokenType != TSqlTokenType.Identifier)
+            // A claim may only ever land on an identifier or a `@@` global variable. If the printer
+            // has claimed a string literal, a quoted identifier or a local `@variable`, that is a
+            // printer bug and relaxing the comparison would hide it — so it fails here instead,
+            // loudly. Note the second case is a token-shape test, not a promise that the token names
+            // a system variable: `DECLARE @@MyVar INT` parses, so only the printer can know that, and
+            // SqlGlobalVariables is where it decides.
+            if (claimed
+                && before[i].TokenType != TSqlTokenType.Identifier
+                && !before[i].IsGlobalVariable())
             {
                 diagnostic = Describe(
                     $"printer claimed a {before[i].TokenType} token as a keyword position",

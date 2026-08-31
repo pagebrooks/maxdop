@@ -126,6 +126,7 @@ internal static class Program
             ("alwaysBreakSelectList", baseline with { AlwaysBreakSelectList = true }),
             ("alwaysBreakWhere", baseline with { AlwaysBreakWhere = true }),
             ("keywordCase=lower", baseline with { KeywordCase = KeywordCase.Lower }),
+            ("recaseBuiltInFunctions=false", baseline with { RecaseBuiltInFunctions = false }),
             ("maxBlankLines=0", baseline with { MaxBlankLines = 0 }),
             ("initialQuotedIdentifiers", baseline with { InitialQuotedIdentifiers = true }),
             ("useTabs", baseline with { Print = baseline.Print with { UseTabs = true } }),
@@ -138,7 +139,8 @@ internal static class Program
 
         Console.WriteLine($"{files.Count} .sql file(s), once per option");
         Console.WriteLine();
-        Console.WriteLine($"{"option",-26}{"formatted",10}{"refused",10}{"crashed",10}{"unstable",10}");
+        Console.WriteLine(
+            $"{"option",-26}{"formatted",10}{"refused",10}{"crashed",10}{"unstable",10}{"moved",10}");
 
         var defects = 0;
         foreach (var (name, options) in variants)
@@ -152,8 +154,12 @@ internal static class Program
             var bad = report.Refused.Count + report.Crashed.Count + report.Unstable.Count;
             defects += bad;
 
+            // Moved comments are not a defect the way the other three are — nothing is lost — but they
+            // are invisible to every gate, so an option that scatters them would otherwise show a
+            // clean row. Reported per option for that reason, and counted separately from `bad`.
             Console.WriteLine(
-                $"{name,-26}{report.Formatted,10}{report.Refused.Count,10}{report.Crashed.Count,10}{report.Unstable.Count,10}"
+                $"{name,-26}{report.Formatted,10}{report.Refused.Count,10}{report.Crashed.Count,10}"
+                + $"{report.Unstable.Count,10}{report.MovedComments,10}"
                 + (bad > 0 ? "  <-- defect" : string.Empty));
 
             foreach (var (file, detail) in report.Refused.Concat(report.Crashed).Concat(report.Unstable).Take(5))
@@ -255,8 +261,114 @@ internal static class Program
             report.Unstable.Add((file, $"second pass threw {e.GetType().Name}: {e.Message}"));
         }
 
+        MeasureComments(input, result.Output, file, options, report);
         MeasurePassthrough(input, file, options, report);
     }
+
+    /// <summary>
+    /// Counts the input's comments, and how many of them came back sitting between different code
+    /// than they were written between.
+    /// </summary>
+    /// <remarks>
+    /// <para>The safety gates cannot see this. A comment that <em>moves</em> is still present, still
+    /// in order, and still round-trips, so the formatter accepts the output and reports success —
+    /// which is why the number has to be measured rather than inferred from a clean run.</para>
+    /// <para>Position is defined as the pair of code tokens the comment sits between, the only
+    /// definition that survives reformatting: line and column both change legitimately. Commas are
+    /// skipped and the comparison is case-insensitive, because <c>leadingCommas</c> moves a comma past
+    /// its neighbour and <c>keywordCase</c> rewrites neighbours in place — neither moves a comment.
+    /// The same definition the comment fuzzer uses, so the two harnesses cannot drift apart.</para>
+    /// <para>Comments are paired by index. That is sound only because a <c>Formatted</c> result has
+    /// already passed the comment-preservation gate, which proves the counts and the order match.</para>
+    /// </remarks>
+    private static void MeasureComments(
+        string input,
+        string output,
+        string file,
+        FormatOptions options,
+        Report report)
+    {
+        try
+        {
+            var before = CommentNeighbours(input, options);
+            var after = CommentNeighbours(output, options);
+
+            report.TotalComments += before.Count;
+
+            if (before.Count != after.Count)
+            {
+                // Cannot happen behind the preservation gate; recorded rather than assumed away.
+                report.CommentsLost.Add((file, $"{before.Count} comment(s) in, {after.Count} out"));
+                return;
+            }
+
+            var moved = 0;
+            for (var i = 0; i < before.Count; i++)
+            {
+                if (before[i] != after[i])
+                {
+                    moved++;
+                    if (report.MovedCommentSamples.Count < 20)
+                    {
+                        report.MovedCommentSamples.Add(
+                            (file, $"was [{before[i].Previous} _ {before[i].Next}], "
+                                + $"now [{after[i].Previous} _ {after[i].Next}]"));
+                    }
+                }
+            }
+
+            if (moved > 0)
+            {
+                report.MovedComments += moved;
+                report.MovedCommentFiles.Add(file);
+            }
+        }
+        catch (Exception e)
+        {
+            report.Crashed.Add((file, $"comment measurement threw {e.GetType().Name}: {e.Message}"));
+        }
+    }
+
+    /// <summary>The code tokens each comment in <paramref name="sql"/> sits between, in order.</summary>
+    private static List<(string Previous, string Next)> CommentNeighbours(string sql, FormatOptions options)
+    {
+        var parser = ParserFactory.Create(options);
+        using var reader = new StringReader(sql);
+        var tokens = parser.GetTokenStream(reader, out _);
+
+        var result = new List<(string, string)>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (IsComment(tokens[i]))
+            {
+                result.Add((NeighbourCode(tokens, i, -1), NeighbourCode(tokens, i, 1)));
+            }
+        }
+
+        return result;
+    }
+
+    private static string NeighbourCode(IList<TSqlParserToken> tokens, int from, int step)
+    {
+        for (var i = from + step; i >= 0 && i < tokens.Count; i += step)
+        {
+            var token = tokens[i];
+            if (IsComment(token)
+                || token.TokenType is TSqlTokenType.WhiteSpace or TSqlTokenType.Comma
+                or TSqlTokenType.EndOfFile)
+            {
+                continue;
+            }
+
+            return (token.Text ?? string.Empty).ToUpperInvariant();
+        }
+
+        return step < 0 ? "<start>" : "<end>";
+    }
+
+    // Mirrors SqlTokens.IsComment, which is internal to Maxdop.Core.
+    private static bool IsComment(TSqlParserToken token) =>
+        token.TokenType is TSqlTokenType.SingleLineComment or TSqlTokenType.MultilineComment;
 
     /// <summary>
     /// Re-runs the printer alone to record which node types were emitted verbatim, and how much
@@ -655,6 +767,16 @@ internal static class Program
 
         internal List<(string File, string Detail)> Unstable { get; } = [];
 
+        internal long TotalComments { get; set; }
+
+        internal int MovedComments { get; set; }
+
+        internal HashSet<string> MovedCommentFiles { get; } = [];
+
+        internal List<(string File, string Detail)> MovedCommentSamples { get; } = [];
+
+        internal List<(string File, string Detail)> CommentsLost { get; } = [];
+
         internal void Print(TimeSpan elapsed, int show, bool verbose)
         {
             var total = Formatted + ParseFailed.Count + Refused.Count + Crashed.Count + Empty + ExpectedFailure;
@@ -668,6 +790,21 @@ internal static class Program
             Line("CRASHED (maxdop's problem)", Crashed.Count, total);
             Line("NOT IDEMPOTENT (maxdop's problem)", Unstable.Count, total);
             Line("empty", Empty, total);
+
+            Console.WriteLine();
+
+            // Comment fate. Neither number is visible to the safety gates: a lost comment is caught by
+            // the preservation gate and shows up as a refusal, so zero here is expected rather than
+            // impressive — but a *moved* comment passes every gate there is, which is why it is
+            // counted rather than assumed.
+            Console.WriteLine(
+                $"comments    : {TotalComments:N0} in formatted files; {CommentsLost.Count:N0} lost, "
+                + $"{MovedComments:N0} moved relative to their code across {MovedCommentFiles.Count:N0} file(s)");
+
+            foreach (var (file, detail) in MovedCommentSamples.Take(verbose ? 20 : 3))
+            {
+                Console.WriteLine($"              {Path.GetFileName(file)}: {detail}");
+            }
 
             Console.WriteLine();
 

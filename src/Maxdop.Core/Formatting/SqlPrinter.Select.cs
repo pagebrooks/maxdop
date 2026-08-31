@@ -1291,20 +1291,41 @@ public sealed partial class SqlPrinter
         // The separator between a call target and the function is `.` for a schema but `::` for a
         // type or user-defined type. Hard-coding `.` turned `t2::f()` into `t2::.f()`.
         var name = call.CallTarget is null
-            ? Print(call.FunctionName)
+            ? PrintFunctionName(call.FunctionName)
             : Doc.Concat(
                 Print(call.CallTarget),
                 Doc.Text(TextBetween(call.CallTarget, call.FunctionName)),
                 Print(call.FunctionName));
 
-        // The argument list ends where the OVER clause begins, if there is one.
-        var over = call.OverClause;
-        var argsFrom = call.FunctionName.LastTokenIndex + 1;
-        var argsEnd = over is null ? call.LastTokenIndex : EffectiveFirstToken(over) - 1;
+        // The argument list ends where the first trailing clause begins. There can be two —
+        // `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY a) OVER (PARTITION BY b)` — so they are taken
+        // in written order rather than assumed. `WITHIN GROUP` used to fall through to the slice
+        // below, where `GROUP` recased and the non-reserved `WITHIN` beside it did not, and one
+        // clause came out in two cases.
+        var trailing = new TSqlFragment?[] { call.WithinGroupClause, call.OverClause }
+            .Where(c => c is not null && c.FirstTokenIndex >= 0)
+            .Select(c => c!)
+            .OrderBy(c => c.FirstTokenIndex)
+            .ToList();
 
-        if (over is not null && SignificantTextBetween(over.LastTokenIndex + 1, call.LastTokenIndex).Length > 0)
+        var argsFrom = call.FunctionName.LastTokenIndex + 1;
+        var argsEnd = trailing.Count == 0 ? call.LastTokenIndex : EffectiveFirstToken(trailing[0]) - 1;
+
+        // Nothing unmodelled may sit after the last trailing clause, or between two of them — either
+        // would be dropped by emitting the clauses alone.
+        if (trailing.Count > 0
+            && SignificantTextBetween(trailing[^1].LastTokenIndex + 1, call.LastTokenIndex).Length > 0)
         {
             return Passthrough(call);
+        }
+
+        for (var i = 1; i < trailing.Count; i++)
+        {
+            if (SignificantTextBetween(
+                    trailing[i - 1].LastTokenIndex + 1, EffectiveFirstToken(trailing[i]) - 1).Length > 0)
+            {
+                return Passthrough(call);
+            }
         }
 
         Doc arguments;
@@ -1360,30 +1381,41 @@ public sealed partial class SqlPrinter
         // `RTRIM(x) COLLATE SQL_Latin1_General_CP1_CI_AS` — the same trait that puts one after
         // `CASE … END`. Located by finding the parenthesis rather than assuming the arguments run to
         // the end, so the clause is emitted instead of the whole call being declined.
+        // Measured from the end of the last argument, not from the parenthesis. A comment in front of
+        // the `)` attaches to whatever follows it — `WITHIN GROUP`, a collation — and that clause is
+        // emitted separately, starting *after* the parenthesis. The comment falls between the two and
+        // is emitted by neither, so the file was refused. Declining the call keeps it: verbatim text
+        // for one expression beats an unchanged file.
+        //
+        // Checked whenever anything follows the arguments at all, not only when that something is
+        // text this handler slices. `WITHIN GROUP` became a printed child rather than part of the
+        // slice, which emptied the old text test and silently switched this guard off — the comment
+        // fuzzer found the seven sites that let through.
+        var afterArguments = call.Parameters.Count > 0
+            ? call.Parameters[^1].LastTokenIndex + 1
+            : closeParen + 1;
+
+        if ((SignificantTextBetween(closeParen + 1, argsEnd).Length > 0 || trailing.Count > 0)
+            && !NoCommentsIn(afterArguments, argsEnd))
+        {
+            return Passthrough(call);
+        }
+
         if (SignificantTextBetween(closeParen + 1, argsEnd).Length > 0)
         {
-            // Measured from the end of the last argument, not from the parenthesis. A comment in
-            // front of the `)` attaches to whatever follows it — `WITHIN GROUP`, a collation — and
-            // that clause is emitted by the slice below, which starts *after* the parenthesis. The
-            // comment falls between the two and was emitted by neither, so the file was refused.
-            // Declining the call keeps it: verbatim text for one expression beats an unchanged file.
-            var afterArguments = call.Parameters.Count > 0
-                ? call.Parameters[^1].LastTokenIndex + 1
-                : closeParen + 1;
-
-            if (!NoCommentsIn(afterArguments, argsEnd))
-            {
-                return Passthrough(call);
-            }
-
             parts.Add(Doc.Text(" "));
             parts.Add(CasedTokens(closeParen + 1, argsEnd));
         }
 
-        if (over is not null)
+        // SeparatorBefore rather than a plain space, the rule every handler that emits a separator in
+        // front of a printed child has to follow. `WITHIN GROUP` only became a printed child when it
+        // stopped being part of the slice above, and an own-line comment ahead of it was immediately
+        // dragged onto the previous line — where it has code to its left, is reclassified as
+        // end-of-line on the next pass, and moves again. The comment fuzz tests caught it.
+        foreach (var clause in trailing)
         {
-            parts.Add(Doc.Text(" "));
-            parts.Add(Print(over));
+            parts.Add(SeparatorBefore(clause));
+            parts.Add(Print(clause));
         }
 
         return Doc.Concat(parts);

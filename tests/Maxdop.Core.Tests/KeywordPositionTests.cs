@@ -154,12 +154,165 @@ public class KeywordPositionTests
     }
 
     [Fact]
-    public void FunctionNamesAreNotRecased()
+    public void QualifiedFunctionNamesAreNotRecased()
     {
-        // ScriptDom models `ROW_NUMBER()` and `dbo.MyFunc()` identically, so there is no way to tell a
-        // built-in from a user-defined function here. Left alone rather than guessed at.
-        Assert.Contains("row_number()", Format("select row_number() over (order by a) from t;"), StringComparison.Ordinal);
+        // The half of RecaseBuiltInFunctions that protects real data. ScriptDom models `len(x)` and
+        // `dbo.Len(x)` identically, so the printer cannot tell them apart from the node — but SQL
+        // Server can, and requires at least two parts to reach a user-defined function. A call with a
+        // call target is therefore a user object by construction, whatever it is spelled like, and is
+        // left exactly as written even when the name is on the built-in list.
+        Assert.Contains("dbo.Len(", Format("select dbo.Len(1) from t;"), StringComparison.Ordinal);
         Assert.Contains("dbo.MyFunc(", Format("select dbo.MyFunc(1) from t;"), StringComparison.Ordinal);
+        Assert.Contains("dbo.getdate(", Format("select dbo.getdate() from t;"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DelimitedFunctionNamesAreNotRecased()
+    {
+        // Brackets are how an author says "this identifier is spelled exactly like this". A quoted
+        // name lexes as QuotedIdentifier rather than Identifier, so the slice would decline it anyway
+        // — the explicit QuoteType check states the intent rather than relying on that.
+        Assert.Contains("[len](", Format("select [len](a) from t;"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnrecognisedFunctionNamesAreNotRecased()
+    {
+        // Not on the built-in list, so nothing proves it is not a name. The vocabulary is the whole
+        // permission here, and a word outside it gets none.
+        Assert.Contains("myfunc(", Format("select myfunc(1) from t;"), StringComparison.Ordinal);
+    }
+
+    // --- built-in function names, the one vocabulary-proved position ---------------------
+
+    [Theory]
+    // The only casing decision maxdop makes from a spelling rather than from the parse tree, which is
+    // why it is the only one behind a config switch. See FormatOptions.RecaseBuiltInFunctions.
+    [InlineData("select len(a) from t;", "LEN(a)")]
+    [InlineData("select replace(a, b, c) from t;", "REPLACE(a, b, c)")]
+    [InlineData("select isnull(a, 0) from t;", "ISNULL(a, 0)")]
+    [InlineData("select count(*) from t;", "COUNT(*)")]
+    [InlineData("select count(distinct a) from t;", "COUNT(DISTINCT a)")]
+    [InlineData("select newid();", "NEWID()")]
+    [InlineData("select getdate();", "GETDATE()")]
+    [InlineData("select row_number() over (order by a) from t;", "ROW_NUMBER()")]
+    [InlineData("select string_agg(a, ',') from t;", "STRING_AGG(a, ',')")]
+    // A built-in table-valued function needs no vocabulary — GlobalFunctionTableReference means the
+    // parser already matched a built-in — but it follows the same switch, so that turning the option
+    // off restores the whole of the old behaviour rather than most of it.
+    [InlineData("select a from string_split(@s, ',');", "STRING_SPLIT(@s, ',')")]
+    public void BuiltInFunctionNamesAreRecased(string input, string expected)
+    {
+        Assert.Contains(expected, Format(input), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuiltInFunctionNamesFollowKeywordCaseBothWays()
+    {
+        // Recasing means "give it keyword case", not "upper-case it": under keywordCase: "lower" an
+        // author's GETDATE() has to come down, or the option is half-applied in the same way
+        // `DECLARE @a INT` used to be.
+        Assert.Equal(
+            "select getdate();",
+            Formatted("SELECT GETDATE();", FormatOptions.Default with { KeywordCase = KeywordCase.Lower }));
+    }
+
+    [Fact]
+    public void RecaseBuiltInFunctionsOffKeepsTheAuthorsCasing()
+    {
+        // The escape hatch, and the reason the option exists: a database where a bare built-in name
+        // resolves somewhere else under a case-sensitive collation. Off means off for the parser-proved
+        // table functions too.
+        var options = FormatOptions.Default with { RecaseBuiltInFunctions = false };
+
+        Assert.Equal(
+            "SELECT len(a), getdate() FROM string_split(@s, ',');",
+            Formatted("select len(a), getdate() from string_split(@s, ',');", options));
+
+        // Everything with a ScriptDom node of its own is unaffected: those are proved from structure,
+        // not from the list, so the switch has no business reaching them.
+        Assert.Contains("COALESCE(", Formatted("select coalesce(a, b) from t;", options), StringComparison.Ordinal);
+        Assert.Contains("CAST(a AS INT)", Formatted("select cast(a as int) from t;", options), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NamesThatMerelyLookLikeBuiltInsAreNotTouched()
+    {
+        // The list is consulted in function-name position and nowhere else, so a column, table, alias,
+        // variable or procedure that happens to share a spelling with a built-in is a plain name and
+        // stays one. This is the check that keeps the vocabulary from leaking out of its one position.
+        Assert.Equal(
+            "SELECT len, t.count, x AS getdate FROM dbo.replace AS t;",
+            Format("select len, t.count, x as getdate from dbo.replace as t;"));
+        Assert.Equal("DECLARE @len INT = 1;", Format("declare @len int = 1;"));
+        Assert.Equal("EXEC dbo.newid @len;", Format("exec dbo.newid @len;"));
+    }
+
+    [Fact]
+    public void RecasingABuiltInIsStable()
+    {
+        // Idempotency, per option: a formatter whose output is not a fixed point rewrites a file on
+        // every save. Checked here because both new positions change token text, which is where the
+        // corpus has caught instability before.
+        foreach (var options in new[]
+        {
+            FormatOptions.Default,
+            FormatOptions.Default with { KeywordCase = KeywordCase.Lower },
+            FormatOptions.Default with { RecaseBuiltInFunctions = false },
+        })
+        {
+            const string sql = "select len(a), @@rowcount, string_agg(b, ',') within group (order by c) from t;";
+            var once = Formatted(sql, options);
+
+            Assert.Equal(once, Formatted(once, options));
+        }
+    }
+
+    // --- global variables, the second vocabulary-proved position ------------------------
+
+    [Theory]
+    [InlineData("select @@rowcount;", "@@ROWCOUNT")]
+    [InlineData("select @@identity;", "@@IDENTITY")]
+    [InlineData("select @@trancount;", "@@TRANCOUNT")]
+    [InlineData("while @@fetch_status = 0 begin fetch next from c; end", "@@FETCH_STATUS")]
+    [InlineData("if @@error <> 0 print @@servername;", "@@ERROR")]
+    public void GlobalVariablesAreRecased(string input, string expected)
+    {
+        Assert.Contains(expected, Format(input), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LocalVariableSpelledLikeAGlobalIsNotRecased()
+    {
+        // The negative half, and the reason SqlGlobalVariables exists rather than a `@@` prefix test.
+        // `DECLARE @@MyVar INT` is legal T-SQL, and ScriptDom resolves a later reference by spelling
+        // rather than by scope — so in an expression position a user's `@@MyVar` arrives as the very
+        // same GlobalVariableExpression that `@@ROWCOUNT` does. Recasing on the prefix alone would
+        // rename it under a case-sensitive collation.
+        var formatted = Format("declare @@MyVar int; set @@MyVar = 1; select @@MyVar, @@rowcount;");
+
+        Assert.Contains("@@MyVar", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("@@MYVAR", formatted, StringComparison.Ordinal);
+        Assert.Contains("@@ROWCOUNT", formatted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnrecognisedGlobalVariableIsNotRecased()
+    {
+        Assert.Contains("@@NotAThing", Format("select @@NotAThing;"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GlobalVariablesFollowTheSameSwitchAsBuiltInFunctions()
+    {
+        // Not a switch of its own: the proof has the same shape — a vocabulary rather than the parse
+        // tree — so one answer governs both, and the config surface stays capped.
+        var options = FormatOptions.Default with { RecaseBuiltInFunctions = false };
+
+        Assert.Equal("SELECT @@rowcount;", Formatted("select @@rowcount;", options));
+        Assert.Equal(
+            "select @@rowcount;",
+            Formatted("SELECT @@ROWCOUNT;", FormatOptions.Default with { KeywordCase = KeywordCase.Lower }));
     }
 
     // --- the permission is per token, and validated -------------------------------------
@@ -211,6 +364,22 @@ public class KeywordPositionTests
 
         // Index 2 is the literal: `SELECT`, whitespace, `'Yes'`.
         Assert.False(RoundTripVerifier.Verify(before, after, out var diagnostic, new HashSet<int> { 2 }));
+        Assert.Contains("claimed a", diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifierAcceptsAClaimOnAGlobalVariableButNotALocalOne()
+    {
+        // The claim rule was widened by exactly one token shape, for `@@ROWCOUNT`. A local `@variable`
+        // is not that shape, and a claim on one is still a printer bug — which is what keeps the
+        // widening from quietly covering every variable in the language.
+        var beforeGlobal = Parse("SELECT @@rowcount;", out _);
+        var afterGlobal = Parse("SELECT @@ROWCOUNT;", out _);
+        Assert.True(RoundTripVerifier.Verify(beforeGlobal, afterGlobal, out _, new HashSet<int> { 2 }));
+
+        var beforeLocal = Parse("SELECT @Amount;", out _);
+        var afterLocal = Parse("SELECT @amount;", out _);
+        Assert.False(RoundTripVerifier.Verify(beforeLocal, afterLocal, out var diagnostic, new HashSet<int> { 2 }));
         Assert.Contains("claimed a", diagnostic, StringComparison.Ordinal);
     }
 

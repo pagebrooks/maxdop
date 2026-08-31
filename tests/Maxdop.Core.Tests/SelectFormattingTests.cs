@@ -148,8 +148,8 @@ public class SelectFormattingTests
             FROM t
             GROUP BY a
             HAVING
-                    sum(b) > 1000
-                AND count(*) > 5
+                    SUM(b) > 1000
+                AND COUNT(*) > 5
             """,
             Format(
                 "select a from t group by a having sum(b) > 1000 and count(*) > 5",
@@ -606,7 +606,7 @@ public class SelectFormattingTests
         // break of its own and the pressure fell through to the innermost group that did — the
         // ORDER BY list. That broke after `ORDER BY` and left the frame stranded on the next line:
         //
-        //     sum(s.Revenue) OVER (ORDER BY
+        //     SUM(s.Revenue) OVER (ORDER BY
         //         s.Revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal
         //
         // Breaking the outer construct first and leaving the inner ones flat is the right order.
@@ -614,7 +614,7 @@ public class SelectFormattingTests
             """
             SELECT
                 s.RepName,
-                sum(s.Revenue) OVER (
+                SUM(s.Revenue) OVER (
                     ORDER BY s.Revenue DESC
                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 ) AS RunningTotal
@@ -646,7 +646,7 @@ public class SelectFormattingTests
         Assert.Equal(
             """
             SELECT
-                sum(s.Revenue) OVER (
+                SUM(s.Revenue) OVER (
                     PARTITION BY s.RegionId, s.Year
                     ORDER BY s.Revenue DESC
                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -664,7 +664,7 @@ public class SelectFormattingTests
         // The first choice is always no break at all; the expanded form is what a narrow line buys,
         // not the default.
         Assert.Equal(
-            "SELECT row_number() OVER (PARTITION BY a ORDER BY b DESC) AS rn FROM t",
+            "SELECT ROW_NUMBER() OVER (PARTITION BY a ORDER BY b DESC) AS rn FROM t",
             Format("select row_number() over (partition by a order by b desc) as rn from t"));
     }
 
@@ -852,7 +852,7 @@ public class SelectFormattingTests
         // The reason the rule is about branch count rather than "CASE always breaks": this idiom is
         // counting, not branching, and it is everywhere. Forcing it open would be a plain regression.
         Assert.Equal(
-            "SELECT sum(CASE WHEN o.Status = 'shipped' THEN 1 ELSE 0 END) AS Shipped FROM o",
+            "SELECT SUM(CASE WHEN o.Status = 'shipped' THEN 1 ELSE 0 END) AS Shipped FROM o",
             Format("select sum(case when o.Status='shipped' then 1 else 0 end) as Shipped from o"));
     }
 

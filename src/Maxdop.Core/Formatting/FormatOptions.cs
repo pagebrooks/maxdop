@@ -35,6 +35,26 @@ public sealed record FormatOptions
     public bool LeadingCommas { get; init; }
 
     /// <summary>
+    /// Give built-in function names <see cref="KeywordCase"/> too: <c>getdate()</c> becomes
+    /// <c>GETDATE()</c>, <c>len(x)</c> becomes <c>LEN(x)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>The one casing decision maxdop makes from a vocabulary rather than from the parse tree,
+    /// which is why it is the one that can be switched off. ScriptDom models <c>GETDATE()</c> and
+    /// <c>dbo.MyFunc()</c> identically — both a <c>FunctionCall</c> with an <c>Identifier</c> name —
+    /// so there is no <c>SqlDataTypeReference</c>-shaped proof available and the printer matches
+    /// against <see cref="Syntax.SqlBuiltInFunctions"/> instead.</para>
+    /// <para>On by default because the alternative is worse: with it off, <c>CAST</c>, <c>COALESCE</c>
+    /// and <c>NULLIF</c> are recased from structural proof while <c>len</c> and <c>row_number</c>
+    /// beside them are not, and one expression comes out in two cases. The residual risk is narrow —
+    /// only an <em>unqualified</em>, unquoted call is touched, and SQL Server requires at least a
+    /// two-part name to invoke a user-defined function, so <c>dbo.Len(x)</c> is untouched — but a
+    /// case-sensitive collation plus a database that has somehow made a bare built-in name resolve
+    /// elsewhere is what this switch is for.</para>
+    /// </remarks>
+    public bool RecaseBuiltInFunctions { get; init; } = true;
+
+    /// <summary>
     /// Put every column of a multi-column SELECT list on its own line, even when they would fit
     /// on one. Teams that review SQL in diffs often want this: a one-line list makes adding a
     /// column look like a change to every column.

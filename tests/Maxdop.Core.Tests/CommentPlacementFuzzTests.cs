@@ -58,8 +58,15 @@ public class CommentPlacementFuzzTests
     /// Mostly the same keyword-run cause seen from the other side: a comment inside a run that is
     /// emitted as one unit has nowhere to go but the end of it. Genuine placement defects hide in
     /// here too, which is why the number is pinned rather than waved away.
+    /// <para>2185 → 2179 with the <c>WITHIN GROUP</c> handler. The handler itself would have *added*
+    /// seven, all on one construct: taking the clause out of the slice after the closing parenthesis
+    /// emptied the text test that a comment guard was hiding behind, and switched the guard off
+    /// without changing a line of it. Restoring the guard for any trailing clause fixed those seven
+    /// and six pre-existing <c>OVER</c> sites with the same cause — a comment before a windowed
+    /// call's <c>)</c> used to move past it. <b>Worth stating plainly: the ratchet caught a defect
+    /// that every other gate passed.</b></para>
     /// </remarks>
-    private const int KnownMovedSites = 2185;
+    private const int KnownMovedSites = 2179;
 
     [Fact]
     public void CommentsInsertedAtEveryTokenBoundaryKeepTheirPlace()

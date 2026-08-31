@@ -86,6 +86,7 @@ public sealed class ConfigFileTests : IDisposable
               "useTabs": true,
               "keywordCase": "lower",
               "leadingCommas": true,
+              "recaseBuiltInFunctions": false,
               "alwaysBreakSelectList": true,
               "alwaysBreakWhere": true,
               "maxBlankLines": 0,
@@ -101,6 +102,7 @@ public sealed class ConfigFileTests : IDisposable
         Assert.True(options.Print.UseTabs);
         Assert.Equal(KeywordCase.Lower, options.KeywordCase);
         Assert.True(options.LeadingCommas);
+        Assert.False(options.RecaseBuiltInFunctions);
         Assert.True(options.AlwaysBreakSelectList);
         Assert.True(options.AlwaysBreakWhere);
         Assert.Equal(0, options.MaxBlankLines);

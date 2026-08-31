@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.2
+
+Formatting changes, so expect a one-time diff the first time you save a file that was last formatted
+with 0.1.1.
+
+- Built-in function names now take the configured keyword case: `getdate()` becomes `GETDATE()`,
+  `len(a)` becomes `LEN(a)`. Only unqualified, undelimited calls are touched — `dbo.MyFunc(...)`,
+  `dbo.Len(...)` and `[len](...)` keep the casing you wrote.
+- Global variables too: `@@rowcount` becomes `@@ROWCOUNT`. Your own `DECLARE @@MyVar` is left alone —
+  that is legal T-SQL and indistinguishable from a system variable to the parser, so the documented
+  globals are recognised by name rather than by the `@@` prefix.
+- Both follow `keywordCase`, and both can be switched off with `"recaseBuiltInFunctions": false` in
+  `.maxdop.json`.
+- `WITHIN GROUP` no longer comes out half-cased as `within GROUP`, and now breaks at its own
+  parenthesis on a long line, like `OVER`.
+- Comment placement improved in six cases: a comment written before the closing parenthesis of a
+  windowed call stayed put instead of moving past it.
+- Bundles maxdop 0.1.2.
+
 ## 0.1.1
 
 No change to formatting. This version exists so the extension keeps step with the maxdop release it

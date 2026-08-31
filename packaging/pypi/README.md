@@ -37,7 +37,7 @@ repos:
         name: maxdop
         entry: maxdop --write
         language: python
-        additional_dependencies: [maxdop==0.1.0]
+        additional_dependencies: [maxdop==0.1.2]
         types: [sql]
 ```
 

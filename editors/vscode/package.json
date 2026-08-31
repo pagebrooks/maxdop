@@ -28,6 +28,7 @@
     }
   },
   "categories": [
+
     "Formatters",
     "Programming Languages"
   ],
@@ -36,7 +37,14 @@
     "t-sql",
     "tsql",
     "sql server",
-    "formatter"
+    "formatter",
+    "beautify",
+    "pretty print",
+    "stored procedure",
+    "ssms",
+    "scriptdom",
+    "sqlcmd",
+    "azure sql"
   ],
   "activationEvents": [
     "onLanguage:sql"

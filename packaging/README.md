@@ -64,7 +64,7 @@ Komac is also the cheapest way to check the manifests are right, because it deri
 independently from the archive:
 
 ```sh
-komac analyze maxdop-0.1.0-win-x64.zip
+komac analyze maxdop-0.1.2-win-x64.zip
 ```
 
 Compare its output against `winget/pagebrooks.maxdop.installer.yaml`. Two details it settles that are

@@ -1,4 +1,5 @@
 using Maxdop.Core.Printing;
+using Maxdop.Core.Syntax;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace Maxdop.Core.Formatting;
@@ -36,6 +37,49 @@ public sealed partial class SqlPrinter
 
     private Doc PrintIif(IIfCall call) =>
         PrintKeywordCall(call, [call.Predicate, call.ThenExpression, call.ElseExpression], "IIF");
+
+    /// <summary>
+    /// The name of an unqualified call — <c>GETDATE</c> in <c>getdate()</c> — recased when it is a
+    /// built-in and <see cref="FormatOptions.RecaseBuiltInFunctions"/> is on.
+    /// </summary>
+    /// <remarks>
+    /// The only keyword position in the printer whose proof is a vocabulary rather than the parse
+    /// tree, because ScriptDom gives <c>GETDATE()</c> and <c>dbo.MyFunc()</c> the same node with the
+    /// same <c>Identifier</c> inside it. See <see cref="SqlBuiltInFunctions"/> for why the vocabulary
+    /// is nonetheless close to a proof, and <see cref="FormatOptions.RecaseBuiltInFunctions"/> for
+    /// why the residue is a switch instead of a refusal.
+    /// <para>Two conditions beyond membership, and both are load-bearing. The caller supplies the
+    /// first — only a call with <em>no call target</em> reaches here, so <c>dbo.Len(x)</c> keeps the
+    /// author's casing. The second is the quoting: <c>[len](x)</c> is left alone, because a delimited
+    /// name is the one way an author can say "this identifier is spelled exactly like this", and
+    /// <see cref="Slice"/> would decline to recase the token anyway.</para>
+    /// </remarks>
+    private Doc PrintFunctionName(Identifier name) =>
+        _options.RecaseBuiltInFunctions
+        && name.QuoteType == QuoteType.NotQuoted
+        && SqlBuiltInFunctions.Contains(name.Value)
+            ? WithComments(name, Keywords(name.FirstTokenIndex, name.LastTokenIndex))
+            : Print(name);
+
+    /// <summary>
+    /// A system global variable used as an expression: <c>@@ROWCOUNT</c>, <c>@@FETCH_STATUS</c>.
+    /// </summary>
+    /// <remarks>
+    /// The one handler written for a node that <see cref="IsVerbatimByDesign"/> calls verbatim, and it
+    /// exists for casing alone — there is no layout inside a single token. Grouped with the built-in
+    /// functions because it is the same kind of decision and rides the same switch: Microsoft
+    /// documents these as built-in functions, and the proof available for them is a vocabulary rather
+    /// than the parse tree.
+    /// <para><b>The <c>@@</c> is not what licenses the recase.</b> <c>DECLARE @@MyVar INT</c> is legal
+    /// T-SQL, and ScriptDom hands back a <c>GlobalVariableExpression</c> for a later <c>@@MyVar</c> in
+    /// an expression position exactly as it does for <c>@@ROWCOUNT</c> — it resolves by spelling, not
+    /// by scope. So the name is checked against <see cref="SqlGlobalVariables"/>, and a variable that
+    /// is merely spelled like a system one keeps every character the author wrote.</para>
+    /// </remarks>
+    private Doc PrintGlobalVariable(GlobalVariableExpression global) =>
+        _options.RecaseBuiltInFunctions && SqlGlobalVariables.Contains(global.Name)
+            ? Keywords(global.FirstTokenIndex, global.LastTokenIndex)
+            : Passthrough(global);
 
     /// <summary>
     /// <c>KEYWORD(a, b, …)</c> — the keyword and parentheses read from the token stream, the
@@ -109,6 +153,58 @@ public sealed partial class SqlPrinter
         && child.LastTokenIndex == target.LastTokenIndex
             ? Print(child)
             : Passthrough(target);
+
+    // --- ordered-set aggregates ----------------------------------------------------------
+
+    /// <summary>
+    /// <c>WITHIN GROUP (ORDER BY a DESC)</c> — the ordering an ordered-set aggregate is computed over.
+    /// </summary>
+    /// <remarks>
+    /// Written for casing rather than for layout. The clause used to reach the output through the
+    /// slice that <see cref="PrintFunctionCall"/> takes after the closing parenthesis, and that slice
+    /// recases identifiers nowhere, because a <c>COLLATE Latin1_General_BIN</c> can sit in the same
+    /// region and its collation name is a name. So <c>GROUP</c> recased — it is reserved and lexes as
+    /// its own token — while <c>WITHIN</c>, which is not reserved and lexes as an identifier, did not:
+    /// <c>within GROUP (ORDER BY b)</c>, one clause in two cases.
+    /// <para>The fix is the usual one here, and it is structural rather than a spelling rule:
+    /// <c>WithinGroupClause</c> is a node, so its head is a region the grammar guarantees holds no
+    /// name and <see cref="Keywords"/> may have it. The <c>COLLATE</c> that shares the old region is
+    /// not a node in the same way and keeps exactly the treatment it had.</para>
+    /// <para>The graph form — <c>WITHIN GROUP (GRAPH PATH)</c>, which carries no <c>ORDER BY</c> — is
+    /// declined rather than modelled. It is a different construct wearing the same two words.</para>
+    /// </remarks>
+    private Doc PrintWithinGroup(WithinGroupClause clause)
+    {
+        // A comment anywhere inside sends the whole clause back as written. The words `WITHIN GROUP (`
+        // are emitted as one run, and a comment written between two of them has nowhere to go but the
+        // end of it — which is a move, and the comment fuzzer counts moves. Passthrough keeps the
+        // comment exactly where the author put it, at the cost of leaving this one clause's casing
+        // alone, which is the right trade at this frequency.
+        if (clause.HasGraphPath
+            || clause.OrderByClause is null
+            || !NoCommentsIn(clause.FirstTokenIndex, clause.LastTokenIndex))
+        {
+            return Passthrough(clause);
+        }
+
+        var orderBy = clause.OrderByClause;
+        var headEnd = EffectiveFirstToken(orderBy) - 1;
+
+        // Both ends verified, as everywhere else: the head must be exactly the two words and the
+        // parenthesis, the tail exactly the closing one.
+        if (!Compact(SignificantTextBetween(clause.FirstTokenIndex, headEnd))
+                .Equals("WITHINGROUP(", StringComparison.OrdinalIgnoreCase)
+            || SignificantTextBetween(orderBy.LastTokenIndex + 1, clause.LastTokenIndex) != ")")
+        {
+            return Passthrough(clause);
+        }
+
+        return Doc.Group(Doc.Concat(
+            Keywords(clause.FirstTokenIndex, headEnd),
+            Doc.Indent(Doc.Concat(Doc.SoftLine, Print(orderBy))),
+            Doc.SoftLine,
+            Doc.Text(")")));
+    }
 
     // --- window functions --------------------------------------------------------------
 
@@ -523,18 +619,19 @@ public sealed partial class SqlPrinter
 
     /// <summary>A built-in table-valued function: <c>STRING_SPLIT(@s, ',')</c>, <c>OPENQUERY(…)</c>.</summary>
     /// <remarks>
-    /// The name is <em>not</em> recased, though it safely could be — <c>GlobalFunctionTableReference</c>
-    /// means the parser matched a built-in, so the identifier cannot be a user object. Left alone for
-    /// consistency instead: function-name casing is a stated non-goal because ScriptDom models
-    /// <c>ROW_NUMBER()</c> and <c>dbo.MyFunc()</c> identically, and recasing here would mean
-    /// <c>string_split(…)</c> became upper case while <c>row_number()</c> beside it did not.
+    /// Recasing the name here needs no vocabulary: <c>GlobalFunctionTableReference</c> means the
+    /// parser matched a built-in, so the identifier cannot be a user object. It is still gated on
+    /// <see cref="FormatOptions.RecaseBuiltInFunctions"/>, for consistency rather than for safety —
+    /// <c>string_split(…)</c> coming out upper case while <c>row_number()</c> beside it did not was
+    /// the reason this name was left alone before the option existed, and switching the option off
+    /// has to restore that whole behaviour, not most of it.
     /// </remarks>
     private Doc PrintGlobalFunctionTable(GlobalFunctionTableReference table) =>
         table.Name is null
             ? Passthrough(table)
             : PrintCallableTable(
                 table,
-                CasedTokens(table.Name.FirstTokenIndex, table.Name.LastTokenIndex),
+                CasedOrKeyword(table.Name.FirstTokenIndex, table.Name.LastTokenIndex),
                 table.Name.LastTokenIndex,
                 [.. table.Parameters],
                 []);
@@ -542,15 +639,16 @@ public sealed partial class SqlPrinter
     /// <summary>The <c>::</c> form: <c>::fn_helpcollations()</c>.</summary>
     /// <remarks>
     /// The node's range starts at the <c>::</c>, which belongs to no child, so the callee is sliced from
-    /// the node's own start rather than from the name. Left as written, for the same consistency reason
-    /// as <see cref="PrintGlobalFunctionTable"/>.
+    /// the node's own start rather than from the name. Recased on the same terms as
+    /// <see cref="PrintGlobalFunctionTable"/>: the parser has already matched a built-in, and the
+    /// option decides only whether that proof is acted on.
     /// </remarks>
     private Doc PrintBuiltInFunctionTable(BuiltInFunctionTableReference table) =>
         table.Name is null
             ? Passthrough(table)
             : PrintCallableTable(
                 table,
-                CasedTokens(table.FirstTokenIndex, table.Name.LastTokenIndex),
+                CasedOrKeyword(table.FirstTokenIndex, table.Name.LastTokenIndex),
                 table.Name.LastTokenIndex,
                 [.. table.Parameters],
                 []);

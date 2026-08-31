@@ -37,8 +37,8 @@ is the same binary in your editor and your pipeline, and `.maxdop.json` is commi
 it formats rather than living in each developer's editor settings.
 
 **Nothing else verifies its own output.** Every other tool here formats and hands the result back.
-maxdop re-parses what it produced, compares tokens, tree and comments against the input, and returns
-your file untouched if anything differs. That is a stance about who carries the risk, not a feature
+maxdop re-parses what it produced, compares its significant token stream and its comments against the
+input — identical tokens mean an identical tree — and returns your file untouched if anything differs. That is a stance about who carries the risk, not a feature
 on a roadmap — a formatter that declines to format is a support ticket for a vendor and a promise
 kept for a linter. See [Safety](safety.md).
 
