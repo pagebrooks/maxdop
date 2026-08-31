@@ -454,6 +454,82 @@ public sealed partial class SqlPrinter
     }
 
     /// <summary>
+    /// <c>DBCC CHECKDB ('db') WITH NO_INFOMSGS</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Exists because the generic fallback cannot case this statement and says so: it prints
+    /// with <c>preserveCase</c>, since it has no way to tell a keyword from a name in a construct it
+    /// has never seen. That left the whole of <c>DBCC</c> in the author's casing, which is far more
+    /// visible than the rest of the administrative surface — a maintenance script is mostly
+    /// <c>DBCC</c>, and <c>dbcc checkdb</c> beside a formatted <c>SELECT</c> reads as a formatter that
+    /// gave up.</para>
+    /// <para><b>The proof is the enum, not the spelling.</b> <c>checkdb</c> and <c>no_infomsgs</c> are
+    /// non-reserved and lex as <c>Identifier</c>, so nothing about the tokens says they are grammar.
+    /// But ScriptDom resolved them to <c>DbccCommand.CheckDB</c> and <c>DbccOptionKind.NoInfoMessages</c>
+    /// — the parser matching fixed vocabulary — which is the same structural argument that lets
+    /// <c>GENERATED ALWAYS AS ROW START</c> be recased from the <c>GeneratedAlways</c> enum. Only those
+    /// positions are claimed; every other identifier in the statement, including database and file
+    /// names, stays exactly as written.</para>
+    /// <para>Deliberately <em>not</em> behind <see cref="FormatOptions.RecaseBuiltInFunctions"/>.
+    /// That switch is there because a vocabulary is a weaker kind of proof than the parse tree, and
+    /// this casing is the parse tree — so it belongs with <c>CAST</c> and <c>NVARCHAR</c> under
+    /// <c>KeywordCase</c>, not with the built-in name list. Turning the switch off leaves
+    /// <c>DBCC CHECKDB</c> upper-cased, which is the intended behaviour.</para>
+    /// <para>The one trap is <c>DBCC mydll (FREE)</c>, where the word after <c>DBCC</c> is the name of
+    /// an extended-procedure library. ScriptDom still reports <c>Command = Free</c> there, so the enum
+    /// alone would recase somebody's DLL name; <c>DllName</c> being set is what distinguishes the two,
+    /// and such a statement is handed back to the fallback untouched.</para>
+    /// </remarks>
+    private Doc PrintDbcc(DbccStatement statement)
+    {
+        if (!string.IsNullOrEmpty(statement.DllName) || statement.Command == DbccCommand.None)
+        {
+            return PrintGeneric(statement);
+        }
+
+        var command = FirstSignificantToken(statement.FirstTokenIndex + 1, statement.LastTokenIndex);
+        if (command < 0)
+        {
+            return PrintGeneric(statement);
+        }
+
+        var keywordPositions = new HashSet<int> { command };
+        foreach (var option in statement.Options)
+        {
+            for (var i = option.FirstTokenIndex; i <= option.LastTokenIndex; i++)
+            {
+                keywordPositions.Add(i);
+            }
+        }
+
+        return PrintParts(statement, pureKeywords: false, [.. statement.Literals], keywordPositions);
+    }
+
+    /// <summary>
+    /// The aggregate a <c>PIVOT</c> clause names: <c>SUM</c> in <c>PIVOT (SUM(x) FOR y IN (…))</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Recased on the same proof that governs an ordinary call, and only on it. SQL Server
+    /// resolves a bare aggregate name in this position to a system one, because a CLR user-defined
+    /// aggregate has to be schema-qualified exactly as a scalar user-defined function does. So a
+    /// single-part unquoted name here can only bind to the built-in, while anything carrying a
+    /// qualifier — <c>dbo.MyAgg</c> — arrives with two parts and is left exactly as written.</para>
+    /// <para>This position used to be left alone altogether, on the grounds that
+    /// <c>AggregateFunctionIdentifier</c> is a <c>MultiPartIdentifier</c> and so <em>could</em> name a
+    /// user aggregate. That was true but too coarse: it made <c>PIVOT (sum(x) FOR …)</c> the one place
+    /// a built-in kept the author's casing while a <c>SELECT SUM(x)</c> beside it did not — the same
+    /// split casing the <c>WITHIN GROUP</c> handler exists to remove. Counting the parts turns "could
+    /// be a name" into "is not one", which is the standard the rest of the printer is held to.</para>
+    /// </remarks>
+    private Doc PrintPivotAggregate(MultiPartIdentifier aggregate) =>
+        _options.RecaseBuiltInFunctions
+        && aggregate.Identifiers.Count == 1
+        && aggregate.Identifiers[0].QuoteType == QuoteType.NotQuoted
+        && SqlBuiltInFunctions.Contains(aggregate.Identifiers[0].Value)
+            ? WithComments(aggregate, Keywords(aggregate.FirstTokenIndex, aggregate.LastTokenIndex))
+            : Print(aggregate);
+
+    /// <summary>
     /// <c>&lt;source&gt; PIVOT (SUM(x) FOR y IN ([a], [b])) AS p</c>.
     /// </summary>
     /// <remarks>
@@ -462,8 +538,8 @@ public sealed partial class SqlPrinter
     /// <c>PIVOT (</c>, the aggregate's own parentheses, <c>FOR</c>, <c>IN (</c>, the two closing
     /// parentheses — belongs to no node, so each gap is verified against the grammar and then emitted as
     /// a slice.
-    /// <para>The aggregate name is Printed, not recased: <c>AggregateFunctionIdentifier</c> is a
-    /// multi-part identifier, so it can name a CLR user-defined aggregate rather than <c>SUM</c>.</para>
+    /// <para>The aggregate name goes through <see cref="PrintPivotAggregate"/>, which recases it only
+    /// when its part count proves it cannot be a user aggregate.</para>
     /// </remarks>
     private Doc PrintPivotedTable(PivotedTableReference table)
     {
@@ -501,7 +577,7 @@ public sealed partial class SqlPrinter
             Print(source),
             Doc.Line,
             Keywords(source.LastTokenIndex + 1, EffectiveFirstToken(aggregate) - 1),
-            Print(aggregate),
+            PrintPivotAggregate(aggregate),
             Doc.Text("("),
             JoinList(table.ValueColumns),
 

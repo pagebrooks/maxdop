@@ -1,9 +1,6 @@
-# How maxdop compares
+# Comparison
 
-T-SQL **formatting only**. Several of these are much larger products, and this page says nothing
-about their completion, refactoring or comparison features. Cost and tier columns reflect what each
-vendor publicly advertised when this page was written, and pricing is the thing most likely to have
-moved since — checked 2026-08-21, corrections welcome as an issue.
+Several of these are much larger products. This table only refers to the formatting capabilities.
 
 | | Cost for all features | Parser | Repo-wide config | CLI for CI | Platforms |
 | --- | --- | --- | --- | --- | --- |
@@ -18,17 +15,12 @@ moved since — checked 2026-08-21, corrections welcome as an issue.
 | [Devart SQL Complete](https://www.devart.com/dbforge/sql/sqlcomplete/) | **$$** — free Express is editor-only | own | profiles | **Paid tiers only** | SSMS + Visual Studio |
 | [Redgate SQL Prompt](https://www.red-gate.com/products/sql-prompt/) | **$$$** per seat, per year | own | style files | **Yes** | SSMS + Visual Studio; no VS Code |
 
-## Three tools in this table parse T-SQL, and all three use the same parser
 
-SSMS 22.7 and Microsoft's mssql extension both run ScriptDom. The extension ships
+# Microsoft's ScriptDom-based Formatters
+
+SSMS 22.7 and Microsoft's mssql VS Code extension both run ScriptDom. The extension ships
 `Microsoft.SqlServer.TransactSql.ScriptDom.dll` inside its language service and turns its new
 formatter on by default.
-
-Expect the *output* to converge: same parser, same problems, and whatever any of us lays out badly
-today is a release note away from being fixed. Comparing line breaks with Microsoft is not a durable
-argument, and this page does not try to.
-
-What does not converge is everything around the formatter.
 
 **A formatter with no command line cannot gate a pull request.** Microsoft's runs inside a
 language-service process whose reason to exist is serving an editor. There is no `--check`, no exit
@@ -52,7 +44,7 @@ image and on an air-gapped build agent, where an acquisition step is not an opti
 
 ## Token-based formatters
 
-The rest of the table splits the text into tokens without building a grammar. They get lexical facts
+Token-based formatters split the text into tokens without building a grammar. They get lexical facts
 right and start to fall apart on structural ones. Real outputs:
 
 <table>
@@ -170,3 +162,82 @@ SELECT 'a' || 'b';
 </tr>
 </tbody>
 </table>
+
+## Casing needs a parser too
+
+Uppercasing keywords looks like a lexical job, and for `SELECT` and `FROM` it is. The rest of it is
+not, because T-SQL's non-reserved words lex as ordinary identifiers — the token stream cannot tell
+`sum` the aggregate from `sum` the column, or `checkdb` the `DBCC` command from a table called
+`checkdb`. Getting those right means asking the parse tree, and getting them *wrong* in the other
+direction means renaming somebody's object under a case-sensitive collation.
+
+Both tools below were asked to upper-case keywords. Real outputs:
+
+<table>
+<thead>
+<tr><th align="left">you wrote</th><th align="left"><code>sql-formatter</code> 15.8.2, <code>tsql</code>, <code>keywordCase: upper</code></th><th align="left"><code>maxdop</code></th></tr>
+</thead>
+<tbody>
+<tr>
+<td valign="top">
+
+```sql
+select len(a), getdate(),
+  row_number() over (order by a),
+  sum(x)
+from t pivot (sum(a)
+  for b in ([x])) p;
+dbcc checkdb('db')
+  with no_infomsgs;
+```
+
+</td>
+<td valign="top">
+
+```sql
+SELECT
+  len(a),
+  getdate(),
+  row_number() OVER (
+    ORDER BY
+      a
+  ),
+  sum(x)
+FROM
+  t PIVOT (sum(a) FOR b IN ([x])) p;
+
+DBCC checkdb ('db')
+WITH
+  no_infomsgs;
+```
+
+</td>
+<td valign="top">
+
+```sql
+SELECT LEN(a), GETDATE(), ROW_NUMBER() OVER (ORDER BY a), SUM(x)
+FROM t PIVOT (SUM(a) FOR b IN ([x])) p;
+DBCC CHECKDB('db') WITH NO_INFOMSGS;
+```
+
+</td>
+</tr>
+</tbody>
+</table>
+
+Every word the token-based formatter left alone is one it had no way to classify. maxdop reaches them
+from three different kinds of proof, and declines where it has none:
+
+- **The parse tree**, for anything with a node of its own — `CAST`, `COALESCE`, and the table
+  functions the parser has already matched, such as `STRING_SPLIT`.
+- **The parser's enums**, for `DBCC`: `checkdb` resolves to `DbccCommand.CheckDB`, which is ScriptDom
+  saying it matched fixed vocabulary rather than read a name.
+- **A published list of built-in names**, for the 283 functions that arrive as an undifferentiated
+  call — `LEN`, `GETDATE`, and the graph, vector, regex and AI families. This is the one casing
+  decision in the formatter not derived from the parse tree, so it is the one with a switch
+  (`recaseBuiltInFunctions`), and it applies only to an unqualified, undelimited name: `dbo.Len(x)`
+  and `[len](x)` are left exactly as written.
+
+Where none of the three applies, nothing is recased. `GRANT`, `BACKUP` and the rest of the
+administrative surface keep the casing you gave them, because in a construct with no handler there is
+no way to tell a keyword from an object name, and half-cased output is worse than none.

@@ -21,6 +21,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { checkRecordingLength } from '../tape-duration.mjs';
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
 const check = process.argv.includes('--check');
@@ -28,6 +30,10 @@ const check = process.argv.includes('--check');
 const input = join(here, 'before.sql');
 const snapshot = join(here, 'after.sql');
 const tape = join(here, 'demo.tape');
+
+/** What the tape produces: the recording, and the still taken part-way through it. */
+const GIF = 'demo.gif';
+const STILL = 'demo.png';
 
 /** The file name the tape types at, and so the one a viewer reads on screen. */
 const ON_SCREEN_NAME = 'orders.sql';
@@ -101,7 +107,21 @@ if (check) {
     );
   }
 
-  console.log('demo: recording matches current formatter output');
+  // The text above cannot see a recording that stopped early — a truncated GIF
+  // shows the same formatter output, just less of it. This can, and needs none
+  // of the rendering tools to do it, so CI gets the check too.
+  const recording = join(repo, 'docs', 'images', GIF);
+  if (!existsSync(recording)) {
+    fail(`no recording at ${recording}. Run "npm run terminal".`);
+  }
+  const { actual } = checkRecordingLength({
+    tape: readFileSync(tape, 'utf8'),
+    gif: readFileSync(recording),
+    artifact: `docs/images/${GIF}`,
+    fail,
+  });
+
+  console.log(`demo: recording matches current formatter output, all ${actual.toFixed(1)}s of it`);
   process.exit(0);
 }
 
@@ -180,7 +200,7 @@ try {
 
   writeFileSync(snapshot, current);
 
-  for (const artifact of ['demo.gif', 'demo.png']) {
+  for (const artifact of [GIF, STILL]) {
     const path = join(repo, 'docs', 'images', artifact);
     if (!existsSync(path)) {
       fail(`vhs did not produce ${artifact}.`);
@@ -188,6 +208,15 @@ try {
     const kb = Math.round(readFileSync(path).length / 1024);
     console.log(`demo: docs/images/${artifact}  ${kb} KB`);
   }
+
+  // vhs exiting 0 is not evidence it filmed the whole tape.
+  const { expected, actual } = checkRecordingLength({
+    tape: readFileSync(tape, 'utf8'),
+    gif: readFileSync(join(repo, 'docs', 'images', GIF)),
+    artifact: `docs/images/${GIF}`,
+    fail,
+  });
+  console.log(`demo: ${actual.toFixed(1)}s recorded, against ${expected.toFixed(1)}s of tape`);
 } finally {
   rmSync(stage, { recursive: true, force: true });
 }

@@ -592,6 +592,7 @@ public sealed partial class SqlPrinter
         // shaped alike, discovered at runtime rather than written down one by one. Statements and the
         // option/definition nodes under them only — never expressions, whose layout carries meaning.
         // See SqlPrinter.Generic.cs.
+        DbccStatement dbcc => PrintDbcc(dbcc),
         TSqlStatement or TSqlFragment when IsGenericCandidate(node) => PrintGeneric(node),
 
         _ => Passthrough(node),

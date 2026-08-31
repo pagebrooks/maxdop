@@ -1,6 +1,7 @@
 using Maxdop.Core.Comments;
 using Maxdop.Core.Formatting;
 using Maxdop.Core.Printing;
+using Maxdop.Core.Syntax;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace Maxdop.Core.Tests;
@@ -197,6 +198,14 @@ public class KeywordPositionTests
     [InlineData("select getdate();", "GETDATE()")]
     [InlineData("select row_number() over (order by a) from t;", "ROW_NUMBER()")]
     [InlineData("select string_agg(a, ',') from t;", "STRING_AGG(a, ',')")]
+    // One from each family added after the first pass, so a future trim cannot quietly drop a whole
+    // category: graph (2017), collation, and the 2025 regex, fuzzy, vector and AI sets.
+    [InlineData("select node_id_from_parts(o, g) from t;", "NODE_ID_FROM_PARTS(o, g)")]
+    [InlineData("select collationproperty(c, 'CodePage') from t;", "COLLATIONPROPERTY(c, 'CodePage')")]
+    [InlineData("select regexp_like(a, 'x') from t;", "REGEXP_LIKE(a, 'x')")]
+    [InlineData("select edit_distance(a, b) from t;", "EDIT_DISTANCE(a, b)")]
+    [InlineData("select vector_distance('cosine', a, b) from t;", "VECTOR_DISTANCE('cosine', a, b)")]
+    [InlineData("select ai_translate(a, 'fr') from t;", "AI_TRANSLATE(a, 'fr')")]
     // A built-in table-valued function needs no vocabulary — GlobalFunctionTableReference means the
     // parser already matched a built-in — but it follows the same switch, so that turning the option
     // off restores the whole of the old behaviour rather than most of it.
@@ -266,6 +275,146 @@ public class KeywordPositionTests
 
             Assert.Equal(once, Formatted(once, options));
         }
+    }
+
+    [Theory]
+    // PIVOT names its aggregate through AggregateFunctionIdentifier, a MultiPartIdentifier rather
+    // than a FunctionCall, so it does not reach PrintFunctionName. Left alone it produced the one
+    // place a built-in kept the author's casing while a SELECT beside it did not.
+    [InlineData("select * from t pivot (sum(amount) for m in ([Jan])) p;", "PIVOT (SUM(amount)")]
+    [InlineData("select * from t pivot (count(amount) for m in ([Jan])) p;", "PIVOT (COUNT(amount)")]
+    [InlineData("select * from t pivot (max(amount) for m in ([Jan])) p;", "PIVOT (MAX(amount)")]
+    public void PivotAggregatesAreRecased(string input, string expected)
+    {
+        Assert.Contains(expected, Format(input), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    // The negative half, and the reason the part count is tested rather than the spelling alone: a
+    // CLR user-defined aggregate is legal here and must keep its name exactly. Two parts, brackets,
+    // or a spelling the vocabulary does not know are each enough to leave it alone.
+    [InlineData("select * from t pivot (dbo.MyAgg(amount) for m in ([Jan])) p;", "dbo.MyAgg(amount)")]
+    [InlineData("select * from t pivot ([sum](amount) for m in ([Jan])) p;", "[sum](amount)")]
+    [InlineData("select * from t pivot (MyAgg(amount) for m in ([Jan])) p;", "MyAgg(amount)")]
+    public void PivotAggregatesThatCouldBeNamesAreNotRecased(string input, string expected)
+    {
+        Assert.Contains(expected, Format(input), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PivotAggregateFollowsTheSameSwitch()
+    {
+        // It is the same vocabulary and so the same proof; turning the option off has to restore the
+        // whole of the old behaviour rather than most of it.
+        const string sql = "select * from t pivot (sum(amount) for m in ([Jan])) p;";
+
+        Assert.Contains(
+            "PIVOT (sum(amount)",
+            Formatted(sql, FormatOptions.Default with { RecaseBuiltInFunctions = false }),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PivotAggregateKeepsACommentAttachedToIt()
+    {
+        // Recasing swaps the printed token for a slice, which is where a comment hanging off the
+        // aggregate would go missing.
+        Assert.Contains(
+            "SUM /* keep */(amount)",
+            Format("select * from t pivot (sum /* keep */ (amount) for m in ([Jan])) p;"),
+            StringComparison.Ordinal);
+    }
+
+    // --- DBCC, cased from the parser's enums ---------------------------------------------
+
+    [Theory]
+    // `checkdb` and `no_infomsgs` are non-reserved and lex as Identifier, so the tokens prove nothing.
+    // DbccCommand and DbccOptionKind are what prove it: the parser matched fixed vocabulary, which is
+    // the same argument that recases GENERATED ALWAYS AS ROW START from the GeneratedAlways enum.
+    [InlineData("dbcc checkdb('MyDb') with no_infomsgs;", "DBCC CHECKDB('MyDb') WITH NO_INFOMSGS;")]
+    [InlineData("dbcc checkdb;", "DBCC CHECKDB;")]
+    [InlineData("dbcc dropcleanbuffers;", "DBCC DROPCLEANBUFFERS;")]
+    [InlineData(
+        "dbcc show_statistics('dbo.t', 'IX_Foo') with no_infomsgs, stat_header;",
+        "DBCC SHOW_STATISTICS('dbo.t', 'IX_Foo') WITH NO_INFOMSGS, STAT_HEADER;")]
+    public void DbccCommandsAndOptionsAreRecased(string input, string expected)
+    {
+        Assert.Equal(expected, Format(input));
+    }
+
+    [Fact]
+    public void DbccLeavesNamesAlone()
+    {
+        // The claim is on the command and the options, nothing else. A file name sits in the argument
+        // list as a bare identifier and has to survive verbatim, exactly as a database name in a
+        // literal does — under a case-sensitive collation these are different objects.
+        Assert.Equal(
+            "DBCC SHRINKFILE (MyFileName, 100);",
+            Format("dbcc shrinkfile (MyFileName, 100);"));
+    }
+
+    [Fact]
+    public void DbccWithADllNameIsLeftToTheFallback()
+    {
+        // `DBCC mydll (FREE)` names an extended-procedure library. ScriptDom still reports
+        // Command = Free, so the enum on its own would recase somebody's DLL name; DllName being set
+        // is what separates the two, and the statement is handed back untouched.
+        Assert.Equal("dbcc mydll (free);", Format("dbcc mydll (free);"));
+    }
+
+    [Fact]
+    public void DbccIgnoresTheBuiltInFunctionSwitch()
+    {
+        // recaseBuiltInFunctions exists for casing proved by a vocabulary rather than by the parse
+        // tree. DBCC is proved by DbccCommand and DbccOptionKind, so it belongs with CAST and NVARCHAR
+        // under keywordCase and stays cased with the switch off. Pinned because the opposite reading
+        // is reasonable enough that somebody will eventually make the change.
+        Assert.Equal(
+            "DBCC CHECKDB('MyDb') WITH NO_INFOMSGS;",
+            Formatted(
+                "dbcc checkdb('MyDb') with no_infomsgs;",
+                FormatOptions.Default with { RecaseBuiltInFunctions = false }));
+    }
+
+    [Fact]
+    public void DbccFollowsKeywordCaseBothWays()
+    {
+        Assert.Equal(
+            "dbcc checkdb('MyDb') with no_infomsgs;",
+            Formatted(
+                "DBCC CHECKDB('MyDb') WITH NO_INFOMSGS;",
+                FormatOptions.Default with { KeywordCase = KeywordCase.Lower }));
+    }
+
+    [Fact]
+    public void EveryNameCanReachTheVocabulary()
+    {
+        // A name that lexes as a keyword under every grammar has a token type, and so a handler, of
+        // its own: it can never arrive as a FunctionCall, so listing it is dead weight that also
+        // contradicts what membership here is supposed to mean.
+        //
+        // "Under every grammar" is the whole point, and is why this walks ParserFactory rather than
+        // the default parser. TRY_CONVERT is an Identifier at 80, 90 and 100 and a keyword from 110
+        // up; audited against the latest grammar alone it looks prunable, and pruning it would drop
+        // the only recasing that name will ever get at an older parserVersion.
+        var unreachable = new List<string>();
+
+        foreach (var name in SqlBuiltInFunctions.Names)
+        {
+            var reachable = ParserFactory.SupportedVersions.Any(version =>
+            {
+                var parser = ParserFactory.Create(FormatOptions.Default with { ParserVersion = version });
+                var tokens = parser.GetTokenStream(new StringReader(name), out _);
+                return tokens[0].TokenType == TSqlTokenType.Identifier;
+            });
+
+            if (!reachable)
+            {
+                unreachable.Add(name);
+            }
+        }
+
+        Assert.Empty(unreachable);
     }
 
     // --- global variables, the second vocabulary-proved position ------------------------

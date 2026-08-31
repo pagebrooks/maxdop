@@ -1,6 +1,6 @@
 <img src="editors/vscode/icon.png" alt="" width="80" height="80">
 
-# maxdop — Max Degree of Prettiness for your T-SQL
+# maxdop - The Max Degree of Prettiness for your T-SQL
 
 **A T-SQL formatter that runs in both **Text Editors and CI**, understands the whole language, and checks its own work.**
 
@@ -290,10 +290,10 @@ it.
 
 | | |
 | --- | --- |
-| [Safety](docs/safety.md) | What maxdop guarantees, how it is verified, and what it refuses to touch |
-| [Comparison](docs/comparison.md) | The other ten T-SQL formatters, and what actually separates them |
+| [Safety](docs/safety.md) | Safety guarantees made by maxdop |
+| [Comparison](docs/comparison.md) | Comparison of maxdop against other formatters |
 | [CLI](docs/cli.md) | Flags, exit codes, grammar versioning, migration scripts |
-| [Editors](docs/editors.md) | VS Code, Neovim, plain Vim |
+| [Editors](docs/editors.md) | VS Code, Neovim, plain Vim, Helix |
 | [Development](docs/development.md) | Repo layout and building from source |
 
 ## License

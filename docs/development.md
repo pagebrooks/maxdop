@@ -68,10 +68,11 @@ real binary and compare it against a committed snapshot, which costs seconds and
 rendering tools — a GIF's bytes differ on every recording, so comparing the file itself would fail
 every run and teach everyone to ignore it.
 
-## The corpus
-
-`./corpus` is third-party T-SQL fetched for measurement. It is gitignored and never committed;
-`corpus/MANIFEST.txt` records what each source is, its licence and the commit it came from.
-
-`tests/corpus/` is different: hand-written files covering every construct maxdop models, committed,
-and used by both the test suite and the comment fuzzer.
+Each check also asserts that its recording lasts as long as its tape describes, because a recording
+can fail without failing. A GIF that stopped filming a third of the way through, and one that caught
+an editor's stack trace instead of the editor, are both valid GIFs showing identical formatter
+output, so the text comparison is structurally blind to them — and both have now happened. A
+truncated one is short by a wide margin and loops back into the middle of the demo, which the length
+is enough to catch. `demos/tape-duration.mjs` estimates the tape and reads the GIF's own frame delays
+out of its bytes rather than shelling out to `ffprobe`, so this stays inside the same promise of
+needing none of the rendering tools.

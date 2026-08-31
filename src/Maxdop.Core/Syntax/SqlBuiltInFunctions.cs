@@ -26,10 +26,20 @@ namespace Maxdop.Core.Syntax;
 /// <para>Omitted too: anything not spelled as a bare <c>name(</c> call. <c>@@ROWCOUNT</c> and friends
 /// are global variables, <c>CURRENT_TIMESTAMP</c> and <c>SESSION_USER</c> are reserved words that take
 /// no parentheses, and <c>NEXT VALUE FOR</c> and <c>$PARTITION</c> have syntax of their own.</para>
+/// <para><b>Which names reach this lookup depends on the grammar, so do not prune it against one.</b>
+/// <c>TRY_CONVERT</c> is the current example: it lexes as <c>Identifier</c> under the 80, 90 and 100
+/// grammars and as a <c>TryConvert</c> keyword from 110 up, so auditing against the default parser
+/// makes its entry look dead when it is the only thing that will ever recase the name for someone
+/// formatting at an older <c>parserVersion</c>. Compatibility level governs reserved words, not which
+/// functions exist — <c>TRY_CONVERT</c> is callable on a modern server set to compat 100 — so the
+/// entry is load-bearing exactly where it is reachable. The invariant worth holding is the weaker
+/// one <c>EveryNameCanReachTheVocabulary</c> pins: every name here lexes as <c>Identifier</c> under
+/// <em>at least one</em> supported grammar.</para>
 /// </remarks>
 public static class SqlBuiltInFunctions
 {
-    private static readonly FrozenSet<string> Names = new[]
+    /// <summary>Internal for the test that audits this list against every supported grammar.</summary>
+    internal static readonly FrozenSet<string> Names = new[]
     {
         // Aggregate
         "APPROX_COUNT_DISTINCT", "APPROX_PERCENTILE_CONT", "APPROX_PERCENTILE_DISC", "AVG",
@@ -99,6 +109,34 @@ public static class SqlBuiltInFunctions
         "ENCRYPTBYKEY", "ENCRYPTBYPASSPHRASE", "HASHBYTES", "IS_OBJECTSIGNED", "KEY_GUID", "KEY_ID",
         "KEY_NAME", "SIGNBYASYMKEY", "SIGNBYCERT", "SYMKEYPROPERTY", "VERIFYSIGNEDBYASYMKEY",
         "VERIFYSIGNEDBYCERT",
+
+        // Graph (SQL Server 2017). These read and build the node_id and edge_id pseudo-columns.
+        "EDGE_ID_FROM_PARTS", "GRAPH_ID_FROM_EDGE_ID", "GRAPH_ID_FROM_NODE_ID", "NODE_ID_FROM_PARTS",
+        "OBJECT_ID_FROM_EDGE_ID", "OBJECT_ID_FROM_NODE_ID",
+
+        // Collation
+        "COLLATIONPROPERTY", "TERTIARY_WEIGHTS",
+
+        // Regular expression (SQL Server 2025). REGEXP_MATCHES and REGEXP_SPLIT_TO_TABLE are
+        // omitted: they return tables, so ScriptDom hands them over as a GlobalFunctionTableReference
+        // and the parser has already matched them, exactly as it does for STRING_SPLIT.
+        "REGEXP_COUNT", "REGEXP_INSTR", "REGEXP_LIKE", "REGEXP_REPLACE", "REGEXP_SUBSTR",
+
+        // Fuzzy string match (SQL Server 2025)
+        "EDIT_DISTANCE", "EDIT_DISTANCE_SIMILARITY", "JARO_WINKLER_DISTANCE",
+        "JARO_WINKLER_SIMILARITY",
+
+        // Vector (SQL Server 2025). VECTOR_SEARCH is omitted: its named-argument syntax gets a node
+        // of its own, so it never arrives as a FunctionCall.
+        "VECTOR_DISTANCE", "VECTOR_NORM", "VECTOR_NORMALIZE", "VECTORPROPERTY",
+
+        // AI (SQL Server 2025). AI_GENERATE_EMBEDDINGS and AI_GENERATE_CHUNKS are omitted for the
+        // same reason as VECTOR_SEARCH — `USE MODEL` and `SOURCE = …` are syntax, not arguments.
+        "AI_ANALYZE_SENTIMENT", "AI_CLASSIFY", "AI_EXTRACT", "AI_FIX_GRAMMAR",
+        "AI_GENERATE_RESPONSE", "AI_SUMMARIZE", "AI_TRANSLATE",
+
+        // External
+        "INVOKE_EXTERNAL_API",
 
         // Cursor, trigger, change tracking and text
         "CHANGE_TRACKING_CURRENT_VERSION", "CHANGE_TRACKING_IS_COLUMN_IN_MASK",

@@ -51,6 +51,19 @@ public sealed record FormatOptions
     /// two-part name to invoke a user-defined function, so <c>dbo.Len(x)</c> is untouched — but a
     /// case-sensitive collation plus a database that has somehow made a bare built-in name resolve
     /// elsewhere is what this switch is for.</para>
+    /// <para><b>Scope: the vocabulary-proved positions, and only those.</b> Built-in scalar function
+    /// names, the parser-matched table functions such as <c>STRING_SPLIT</c>, the aggregate a
+    /// <c>PIVOT</c> names, and the <see cref="Syntax.SqlGlobalVariables"/>. A global variable is on
+    /// this switch rather than one of its own because the proof has the same shape, and it is under a
+    /// key named for <em>functions</em> because that is what SQL Server calls it: the product
+    /// documentation files <c>@@ROWCOUNT</c> and <c>@@SERVERNAME</c> under configuration and system
+    /// statistical <em>functions</em>, called without parentheses in the way
+    /// <c>CURRENT_TIMESTAMP</c> is.</para>
+    /// <para>Everything cased from the parse tree is unaffected and stays governed by
+    /// <see cref="KeywordCase"/> alone — <c>WITHIN GROUP</c>, <c>CAST</c>, <c>NVARCHAR</c>, and
+    /// <c>DBCC CHECKDB … WITH NO_INFOMSGS</c>, whose command and options come from ScriptDom's
+    /// <c>DbccCommand</c> and <c>DbccOptionKind</c> enums. Turning this off does not turn those off,
+    /// because this switch exists for the casing that is <em>not</em> parse-tree-proved.</para>
     /// </remarks>
     public bool RecaseBuiltInFunctions { get; init; } = true;
 

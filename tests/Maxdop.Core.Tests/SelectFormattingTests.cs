@@ -1136,10 +1136,11 @@ public class SelectFormattingTests
         // two closing parentheses belong to none of them. The `)` that closes the aggregate is *inside*
         // the gap before `FOR`, and emitting one alongside the slice gave `SUM(x) ) FOR`.
         //
-        // `sum` keeps its casing: AggregateFunctionIdentifier is a multi-part identifier, so it can name
-        // a CLR user-defined aggregate, and function-name casing is a stated non-goal.
+        // `sum` is recased because it is a single unquoted part, which is what proves it is not naming a
+        // CLR user-defined aggregate — those must be schema-qualified. See PrintPivotAggregate, and
+        // KeywordPositionTests for the qualified and bracketed cases that are still left alone.
         Assert.Equal(
-            "SELECT * FROM t PIVOT (sum(amount) FOR month IN ([Jan], [Feb])) AS p;",
+            "SELECT * FROM t PIVOT (SUM(amount) FOR month IN ([Jan], [Feb])) AS p;",
             Format("select * from t pivot (sum(amount) for month in ([Jan], [Feb])) as p;"));
     }
 
