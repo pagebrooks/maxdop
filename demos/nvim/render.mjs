@@ -103,14 +103,28 @@ requireTool('vhs', 'See https://github.com/charmbracelet/vhs#installation.');
 requireTool('ttyd', 'vhs needs it to drive a real terminal.');
 requireTool('ffmpeg', 'vhs needs it to encode the GIF.');
 /**
+ * The binary mise.toml pins, when mise can supply it.
+ *
+ * Preferred over PATH because the pin is the whole point. The documented command
+ * is a bare `npm run nvim`, so resolving the editor against whatever happens to
+ * be installed is exactly what the pin exists to prevent — and it is what put a
+ * nightly's stack trace into this recording once already. Falls through to PATH
+ * when mise is absent, so the script still runs without it.
+ */
+function pinned(tool) {
+  const found = spawnSync('mise', ['which', tool], { encoding: 'utf8', cwd: repo });
+  return found.status === 0 ? found.stdout.trim() : null;
+}
+
+/**
  * The editor to record.
  *
- * NVIM_BINARY exists because this demo is a compatibility test as much as a
- * recording: conform's synchronous format-on-save path calls vim.wait with a
- * fractional timeout, and a Neovim strict enough to reject that errors in
- * BufWritePre and writes the file unformatted. Recording against whatever nvim
- * happens to be on PATH is how a GIF ends up showing a formatter that did
- * nothing, so pin one when the local build is a nightly.
+ * This demo is a compatibility test as much as a recording: conform's synchronous
+ * format-on-save path calls vim.wait with a fractional timeout, and a Neovim
+ * strict enough to reject that errors in BufWritePre and writes the file
+ * unformatted. Recording against whatever nvim happens to be on PATH is how a GIF
+ * ends up showing a formatter that did nothing, which is why mise.toml pins one
+ * and why that pin is consulted before PATH. NVIM_BINARY overrides both.
  */
 function nvimBinary() {
   const configured = process.env.NVIM_BINARY;
@@ -120,7 +134,13 @@ function nvimBinary() {
     }
     return configured;
   }
-  requireTool('nvim', 'The demo is a Neovim recording.');
+
+  const fromMise = pinned('nvim');
+  if (fromMise) {
+    return fromMise;
+  }
+
+  requireTool('nvim', 'mise.toml pins one — run "mise install" — or set NVIM_BINARY.');
   return spawnSync('which', ['nvim'], { encoding: 'utf8' }).stdout.trim();
 }
 requireTool('git', 'Needed to fetch conform.nvim.');

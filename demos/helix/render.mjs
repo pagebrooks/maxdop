@@ -101,7 +101,26 @@ if (check) {
 requireTool('vhs', 'See https://github.com/charmbracelet/vhs#installation.');
 requireTool('ttyd', 'vhs needs it to drive a real terminal.');
 requireTool('ffmpeg', 'vhs needs it to encode the GIF.');
-/** The editor to record. HELIX_BINARY pins one when hx is not on PATH. */
+/**
+ * The binary mise.toml pins, when mise can supply it.
+ *
+ * Preferred over PATH because the pin is the whole point. The documented command
+ * is a bare `npm run helix`, so resolving the editor against whatever happens to
+ * be installed is exactly what the pin exists to prevent — and it is what put a
+ * nightly's stack trace into this recording once already. Falls through to PATH
+ * when mise is absent, so the script still runs without it.
+ */
+function pinned(tool) {
+  const found = spawnSync('mise', ['which', tool], { encoding: 'utf8', cwd: repo });
+  return found.status === 0 ? found.stdout.trim() : null;
+}
+
+/**
+ * The editor to record. mise.toml pins a version, which is consulted before PATH
+ * so the recording does not silently depend on the recorder's own Helix — a
+ * different one renders a different theme and a different status line, and the
+ * still is compared against its predecessor by eye. HELIX_BINARY overrides both.
+ */
 function helixBinary() {
   const configured = process.env.HELIX_BINARY;
   if (configured) {
@@ -110,7 +129,13 @@ function helixBinary() {
     }
     return configured;
   }
-  requireTool('hx', 'The demo is a Helix recording.');
+
+  const fromMise = pinned('hx');
+  if (fromMise) {
+    return fromMise;
+  }
+
+  requireTool('hx', 'mise.toml pins one — run "mise install" — or set HELIX_BINARY.');
   return spawnSync('which', ['hx'], { encoding: 'utf8' }).stdout.trim();
 }
 

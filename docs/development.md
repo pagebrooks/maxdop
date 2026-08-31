@@ -39,8 +39,8 @@ no longer produces.
 cd demos
 npm run generate         # the before/after still, via shiki + resvg
 npm run terminal         # the terminal recording, via VHS — needs vhs, ttyd, ffmpeg
-npm run nvim             # the format-on-save recording — also needs nvim
-npm run helix            # the Helix recording — also needs hx
+npm run nvim             # the format-on-save recording — also needs Neovim, which mise pins
+npm run helix            # the Helix recording — also needs Helix, which mise pins
 ```
 
 The Neovim and Helix demos share `demos/terminal/before.sql` and `after.sql` rather than keeping
@@ -52,11 +52,16 @@ Both editor demos take their configuration out of `docs/editors.md` at record ti
 keymap from the Lua block, Helix's `languages.toml` from the TOML block — so a recording can only
 show config the documentation actually publishes, and renaming those sections fails the script.
 
-Environment variables exist for those recordings. `CONFORM_NVIM` points at a conform.nvim checkout so
-the Neovim one can be made offline, `HELIX_BINARY` pins Helix, and `NVIM_BINARY` pins Neovim. The second is not a convenience:
-conform's synchronous format-on-save calls `vim.wait` with a fractional timeout, and a Neovim strict
-enough to reject that errors in `BufWritePre` and writes the file **unformatted**. Recording against
-an unpinned nightly is how this GIF ends up showing a formatter that did nothing.
+Both editors are pinned in `mise.toml`, and the record scripts consult that pin ahead of `PATH`, so
+`mise install` is the whole setup for either. That is not tidiness. conform's synchronous
+format-on-save calls `vim.wait` with a fractional timeout, and a Neovim strict enough to reject that
+— every 0.12 nightly so far — errors in `BufWritePre` and writes the file **unformatted**. Recording
+against whatever `nvim` happens to be on `PATH` is how the GIF ends up showing a stack trace over a
+buffer nothing happened to: broken, but still a valid GIF, so nothing downstream notices.
+
+Environment variables override the pin where that is what you want. `NVIM_BINARY` and `HELIX_BINARY`
+name an editor directly, and `CONFORM_NVIM` points at a conform.nvim checkout so the Neovim recording
+can be made offline.
 
 `npm run check` and `npm run terminal:check` are the CI halves. They format the sample input with the
 real binary and compare it against a committed snapshot, which costs seconds and needs none of the

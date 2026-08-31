@@ -6,3 +6,15 @@ dotnet = "10.0.302"
 # invites emitting syntax the host cannot parse — a failure that only shows up
 # in someone else's editor.
 node = "22"
+
+# The two editors the demo recordings drive. Pinned for the same reason the SDK
+# is: a recording made against whatever the recorder happened to have installed
+# is not reproducible, and in Neovim's case not even correct.
+#
+# conform.nvim's synchronous format-on-save calls vim.wait with a fractional
+# timeout. A Neovim strict enough to reject that — every 0.12 nightly so far —
+# errors in BufWritePre and writes the file *unformatted*, so the recording
+# captures a stack trace over an unchanged buffer rather than the demo. That is
+# a broken GIF that still renders, which is the kind that gets committed.
+neovim = "0.11.7"
+helix = "25.07.1"
