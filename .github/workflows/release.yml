@@ -483,6 +483,57 @@ jobs:
           # The artifact carries .sha256 files alongside, hence the explicit glob.
           npx vsce publish --packagePath "$GITHUB_WORKSPACE"/vsix/*.vsix
 
+  openvsx:
+    # Open VSX is the registry VSCodium, Gitpod, Theia, Windsurf and Cursor read, because
+    # Microsoft's Marketplace terms restrict it to official VS Code builds. Without this job those
+    # users cannot install the extension at all — they would have to sideload a VSIX by hand — so
+    # this is reach rather than promotion.
+    #
+    # Off until PUBLISH_OPENVSX is set, like the other two publishers, and for the same reason: the
+    # `pbrooks` namespace has to be claimed by hand first and the listing looked at once. See
+    # packaging/README.md.
+    #
+    # Gated on `release` for the reason given on the marketplace job: the irreversible half waits
+    # for the recoverable half.
+    name: openvsx
+    needs: [version, vsix, release]
+    if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_OPENVSX == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/node
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: maxdop-vsix
+          path: vsix
+
+      - name: Install ovsx
+        working-directory: editors/vscode
+        run: npm ci
+
+      - name: Publish every platform VSIX
+        working-directory: editors/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "::error::PUBLISH_OPENVSX is set but the OVSX_PAT secret is not"
+            exit 1
+          fi
+
+          # --skip-duplicate, unlike the pypi job, which has no equivalent and therefore fails a
+          # whole run when a tag is re-run against a version already published. Republishing the
+          # same version here is a no-op rather than an error, which is what makes re-running a
+          # failed tag safe. It cannot mask a real problem: a *different* build of an existing
+          # version is refused by the registry either way.
+          #
+          # One call with every target, as for vsce: the artifact carries .sha256 files alongside
+          # the VSIXs, hence the explicit glob.
+          npx ovsx publish --skip-duplicate --packagePath "$GITHUB_WORKSPACE"/vsix/*.vsix
+
   pypi:
     # Off until someone sets the PUBLISH_PYPI repository variable, for the same
     # reason as the Marketplace job: a PyPI version can never be replaced, only

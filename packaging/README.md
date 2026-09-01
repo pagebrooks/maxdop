@@ -112,6 +112,45 @@ can open the update PR automatically on every tagged release. It needs a persona
 `public_repo` scope, and it publishes to a Microsoft repository on your behalf, so wire it up
 deliberately rather than as a default.
 
+## Open VSX
+
+The registry VSCodium, Gitpod, Theia, Windsurf and Cursor read. Microsoft's Marketplace terms
+restrict it to official VS Code builds, so those editors cannot install from it — without an Open VSX
+listing, a Cursor user has to download a VSIX and sideload it.
+
+Publishing is automated by the `openvsx` job in `.github/workflows/release.yml`, which reuses the
+same per-platform VSIXs the Marketplace job publishes. Two things have to exist first, once:
+
+1. **An Eclipse account with the publisher agreement signed**, then an access token from
+   <https://open-vsx.org/user-settings/tokens>. Store it as the `OVSX_PAT` repository secret.
+
+   The trap is the link between the two accounts: register at
+   <https://accounts.eclipse.org/user/register> and put the **same** GitHub username in the Eclipse
+   profile's *GitHub Username* field as the one you log in to open-vsx.org with. If they differ,
+   open-vsx.org will not offer the publisher agreement and every later step fails without saying
+   why. Sign it under Settings → *Log in with Eclipse* → *Show Publisher Agreement*.
+2. **The `pbrooks` namespace**, claimed with that token:
+
+   ```sh
+   npx ovsx create-namespace pbrooks -p "$OVSX_PAT"
+   ```
+
+   The namespace must match `publisher` in `editors/vscode/package.json`. Creating it does not
+   verify ownership — verification is a separate request to the Open VSX maintainers, and until it
+   is granted the listing shows an "unverified publisher" note.
+
+Then publish the first version by hand, look at the listing, and only then set the
+`PUBLISH_OPENVSX` repository variable to `true` so the job takes over subsequent tags:
+
+```sh
+npx ovsx publish --packagePath ./maxdop-*.vsix -p "$OVSX_PAT"
+```
+
+The job passes `--skip-duplicate`, so re-running a tag whose version is already published is a
+no-op rather than a failure. That is deliberate and worth keeping: the `pypi` job has no equivalent,
+and re-running the v0.1.2 tag failed the whole run on `400 File already exists` for exactly that
+reason.
+
 ## Keeping these current
 
 Both manifests hardcode a version and two hashes. After a release, refresh them from the published

@@ -24,14 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.0.1
-      - run: uvx maxdop@0.1.1 --check src/
+      - run: uvx maxdop@0.1.2 --check src/
 ```
 
 `uvx` fetches the platform wheel — a ~7 MB static binary, no Python code and no .NET runtime — and
 runs it. Nothing is added to your repository and nothing is installed system-wide.
 
 **Pin the version.** `uvx maxdop` unpinned means the next maxdop release changes your formatting and
-reds every open pull request until somebody reformats the tree. `maxdop@0.1.1` makes that a decision
+reds every open pull request until somebody reformats the tree. `maxdop@0.1.2` makes that a decision
 you make in a commit.
 
 Pin the action too. `astral-sh/setup-uv` no longer publishes floating `@v10`-style tags, so an exact
@@ -54,7 +54,7 @@ unrelated legacy file into your problem the moment somebody edits a directory ne
         run: |
           git diff --name-only --diff-filter=ACM -z \
             "origin/${{ github.base_ref }}...HEAD" -- '*.sql' \
-          | uvx maxdop@0.1.1 --check --files-from -
+          | uvx maxdop@0.1.2 --check --files-from -
 ```
 
 Two details decide whether this works.
@@ -82,7 +82,7 @@ git add .maxdop-baseline
 ```
 
 ```yaml
-      - run: uvx maxdop@0.1.1 --check --baseline .maxdop-baseline src/
+      - run: uvx maxdop@0.1.2 --check --baseline .maxdop-baseline src/
 ```
 
 New files and edited files are gated from the first day. A file in the baseline is forgiven until
@@ -124,12 +124,12 @@ job, or you want to verify what you are running, download the release asset — 
         uses: actions/cache@v6
         with:
           path: ~/.cache/maxdop
-          key: maxdop-0.1.1-linux-x64
+          key: maxdop-0.1.2-linux-x64
 
       - name: Download maxdop
         if: steps.maxdop.outputs.cache-hit != 'true'
         env:
-          MAXDOP_VERSION: 0.1.1
+          MAXDOP_VERSION: 0.1.2
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -165,7 +165,7 @@ unrelated to the change, and self-healing just often enough that nobody tracks i
 
 The cache turns N downloads per hour into one per version. Three details make it work:
 
-- **The key carries the version and the platform.** `maxdop-0.1.1-linux-x64` misses the moment you
+- **The key carries the version and the platform.** `maxdop-0.1.2-linux-x64` misses the moment you
   bump the pin, so the new binary is fetched once and then reused; there is no stale-cache failure
   mode to reason about, and no `restore-keys` fallback that could serve you the old version.
 - **`--strip-components=1` keeps the cached layout version-independent**, so the binary is always at
