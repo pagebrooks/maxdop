@@ -391,6 +391,10 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # Only for docs/release-notes-<version>.md, read by the publish step below. Ordered before the
+      # artifact download because checkout expects to own the workspace.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist
@@ -429,11 +433,31 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
+          set -euo pipefail
+
+          # --generate-notes builds the changelog from merged pull requests, which on this
+          # repository means a list of Dependabot bumps and nothing about what actually changed.
+          # v0.1.2 shipped that way and had to be corrected by hand afterwards. A hand-written
+          # docs/release-notes-<version>.md wins when it exists.
+          #
+          # Missing notes are a fallback rather than an error: a release that fails because someone
+          # forgot to write prose is worse than one with generated notes, and this job is the step
+          # every publisher now waits on.
+          notes="docs/release-notes-$VERSION.md"
+          if [ -f "$notes" ]; then
+            echo "release notes: $notes"
+            notes_arg=(--notes-file "$notes")
+          else
+            echo "::warning::no $notes; falling back to generated notes"
+            notes_arg=(--generate-notes)
+          fi
+
           gh release create "${GITHUB_REF#refs/tags/}" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "maxdop ${{ needs.version.outputs.version }}" \
-            --generate-notes \
+            --title "maxdop $VERSION" \
+            "${notes_arg[@]}" \
             --verify-tag \
             dist/*
 
