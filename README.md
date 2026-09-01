@@ -2,7 +2,7 @@
 
 # maxdop - The Max Degree of Prettiness for your T-SQL
 
-**A T-SQL formatter that runs in both **Text Editors and CI**, understands the whole language, and checks its own work.**
+**A T-SQL formatter that runs in both text editors and CI, understands the whole language, and checks its own work.**
 
 * One static binary. 
 * No runtime to install. 
