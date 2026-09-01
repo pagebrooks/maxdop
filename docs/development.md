@@ -26,7 +26,7 @@ pipeline build cannot drift.
 | `demos/nvim/` | Records the format-on-save demo — `docs/images/nvim.gif` and `nvim.png` — with VHS |
 | `demos/helix/` | Records the Helix demo — `docs/images/helix.gif` and `helix.png` — with VHS |
 | `tools/Maxdop.Corpus/` | Dev harness that measures coverage, per option, and ranks what to build next |
-| `packaging/` | Manifests for Scoop, WinGet and mason, plus how each is submitted |
+| `packaging/` | Manifests submitted to Scoop, WinGet, Homebrew and mason, plus the PyPI wheel builder |
 | `mise.toml` | Pinned toolchain — `mise install` and you have it |
 
 ## Regenerating the demo images

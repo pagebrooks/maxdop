@@ -490,8 +490,9 @@ jobs:
     # this is reach rather than promotion.
     #
     # Off until PUBLISH_OPENVSX is set, like the other two publishers, and for the same reason: the
-    # `pbrooks` namespace has to be claimed by hand first and the listing looked at once. See
-    # packaging/README.md.
+    # `pbrooks` namespace has to be claimed by hand first (`ovsx create-namespace`, against an
+    # Eclipse account whose GitHub username matches the one open-vsx.org logs in with) and the
+    # listing looked at once.
     #
     # Gated on `release` for the reason given on the marketplace job: the irreversible half waits
     # for the recoverable half.
