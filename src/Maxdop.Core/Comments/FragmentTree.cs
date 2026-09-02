@@ -21,7 +21,7 @@ internal sealed class FragmentTree
     /// <list type="number">
     /// <item>
     /// The <c>Visit(TSqlFragment)</c> catch-all fires for every node, so no per-type visitor
-    /// override is needed across 1376 exported types.
+    /// override is needed across 1,377 exported types.
     /// </item>
     /// <item>
     /// Some nodes carry an unset range of <c>[-1..-1]</c> — in practice <c>StatementList</c>,

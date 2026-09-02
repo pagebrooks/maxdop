@@ -33,6 +33,49 @@ jobs:
         # TreatWarningsAsErrors is set repo-wide in Directory.Build.props, so a
         # warning fails here without any extra flag.
 
+  coverage:
+    # Reporting only — nothing here fails the build. A coverage percentage is a bad gate for this
+    # repo: most of src/ is node handlers, where an uncovered line means a construct nobody wrote a
+    # fixture for, and driving that number up by writing tests for the number is how a suite starts
+    # lying. The job exists for one question the percentage does not answer, printed as the last
+    # section of the summary: which lines of the safety gates does no test execute?
+    #
+    # A gate that is never exercised approves everything, and it does so silently. That is the one
+    # failure this project cannot detect from its own output.
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+
+      # coverlet.collector is already a PackageReference in both test projects; it does nothing
+      # without --collect, which is why it sat unused until this job existed.
+      - name: Test with coverage
+        run: |
+          dotnet test maxdop.slnx -c Release --nologo \
+            --collect:"XPlat Code Coverage" \
+            --results-directory coverage
+
+      # Each test project writes its own report covering only what it touched, so they are merged
+      # rather than read one at a time: a line the CLI suite reached and the Core suite did not is
+      # covered, and reading either alone would say otherwise.
+      - name: Summary
+        run: |
+          {
+            echo '## Coverage'
+            echo
+            echo '```'
+            python3 tools/coverage-summary.py coverage
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: coverage
+          path: coverage/**/coverage.cobertura.xml
+          retention-days: 14
+
   extension:
     # The unit half of the extension's tests, which talk to a real binary but
     # need no editor. The integration half runs in a real VS Code extension host

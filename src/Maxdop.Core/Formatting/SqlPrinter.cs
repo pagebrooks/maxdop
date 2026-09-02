@@ -42,10 +42,6 @@ public sealed partial class SqlPrinter
     private readonly HashSet<TSqlFragment> _passedThrough = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
-    /// List items whose leading comments <see cref="JoinList"/> has already emitted, in front of
-    /// the separator rather than after it, so <see cref="Print"/> must not emit them again.
-    /// </summary>
-    /// <summary>
     /// Leading comments already emitted somewhere ahead of the node they attach to, so
     /// <see cref="Print"/> must not emit them a second time.
     /// </summary>
@@ -96,6 +92,9 @@ public sealed partial class SqlPrinter
 
     private int _depth;
 
+    /// <param name="root">The parsed fragment to print; its token stream backs every slice.</param>
+    /// <param name="comments">Comments already attached to their nodes by the pre-pass.</param>
+    /// <param name="options">Formatting options. Print options travel separately to the DocPrinter.</param>
     /// <param name="passthroughSink">
     /// Optional collector receiving the root of every verbatim subtree.
     /// </param>
@@ -1147,9 +1146,11 @@ public sealed partial class SqlPrinter
     /// Emits a construct exactly as the author wrote it. This is safety invariant #2
     /// and the reason the formatter can ship before covering all of T-SQL.
     /// </summary>
+    /// <param name="node">The construct to emit verbatim.</param>
     /// <param name="guard">
     /// Handler and line of the bail-out, supplied by the compiler. Never pass this explicitly.
     /// </param>
+    /// <param name="line">Line of the bail-out, supplied by the compiler. Never pass this explicitly.</param>
     /// <remarks>
     /// The caller info exists because "which guard is costing me coverage?" had no answer short of
     /// reading eighty call sites and guessing. It cost real time: <c>OUTPUT</c> clauses were assumed
@@ -1331,6 +1332,8 @@ public sealed partial class SqlPrinter
     /// AST nodes at all, and folding those onto one line produces invalid SQL: `GO` must stand
     /// alone on its line. Newlines in the source are therefore reproduced as breaks.
     /// </remarks>
+    /// <param name="fromIndex">First token of the region, clamped to the stream.</param>
+    /// <param name="toIndex">Last token of the region, clamped to the stream.</param>
     /// <param name="commentOwner">
     /// The node whose leading comments may fall inside this region. Each one found is emitted at the
     /// point it was written and recorded in <see cref="_hoistedComments"/> so the owner skips it.
@@ -1863,6 +1866,12 @@ public sealed partial class SqlPrinter
     /// consistent, and outside a <see cref="Keywords"/> region it shares its classification with the
     /// round-trip verifier so it can never recase something the verifier will then reject.
     /// </remarks>
+    /// <param name="fromIndex">First token of the slice.</param>
+    /// <param name="toIndex">Last token of the slice.</param>
+    /// <param name="pureKeywords">
+    /// The region's grammar admits no object name, so every identifier in it may be recased as a
+    /// keyword.
+    /// </param>
     /// <param name="extraKeywordPositions">
     /// Token indices to treat as keyword positions even in a region that is <em>not</em> pure keywords.
     /// For constructs where part of the scaffolding is provably grammar and part of it provably is not:
@@ -2278,6 +2287,7 @@ public sealed partial class SqlPrinter
     /// The leading comments of <paramref name="node"/>, to be emitted <em>before</em> the operator
     /// keyword that introduces it, or <c>null</c> when they do not belong there.
     /// </summary>
+    /// <param name="node">The operand whose leading comments may need hoisting.</param>
     /// <param name="operatorFrom">Start of the token range between the previous operand and this one.</param>
     /// <param name="operatorTo">End of that range.</param>
     /// <remarks>

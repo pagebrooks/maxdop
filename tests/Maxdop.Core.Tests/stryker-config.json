@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/Schemas/stryker-config.schema.json",
+  "stryker-config": {
+    "project": "Maxdop.Core.csproj",
+    "mutate": [
+      "**/Formatting/RoundTripVerifier.cs",
+      "**/Formatting/SqlFormatter.cs",
+      "**/Formatting/BatchFormatter.cs",
+      "**/Text/SourceEncoding.cs",
+      "**/Comments/CommentAttacher.cs"
+    ],
+    "thresholds": {
+      "high": 90,
+      "low": 75,
+      "break": 78
+    },
+    "reporters": [
+      "progress",
+      "html",
+      "json"
+    ],
+    "concurrency": 4,
+    "disable-mix-mutants": true
+  }
+}

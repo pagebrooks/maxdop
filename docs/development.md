@@ -26,8 +26,63 @@ pipeline build cannot drift.
 | `demos/nvim/` | Records the format-on-save demo — `docs/images/nvim.gif` and `nvim.png` — with VHS |
 | `demos/helix/` | Records the Helix demo — `docs/images/helix.gif` and `helix.png` — with VHS |
 | `tools/Maxdop.Corpus/` | Dev harness that measures coverage, per option, and ranks what to build next |
+| `tools/coverage-summary.py` | Merges the per-project Cobertura reports and lists unexecuted lines in the safety gates |
+| `tools/mutation-summary.py` | Reads a Stryker report and lists the mutants no test objected to |
 | `packaging/` | Manifests submitted to Scoop, WinGet, Homebrew and mason, plus the PyPI wheel builder |
 | `mise.toml` | Pinned toolchain — `mise install` and you have it |
+
+## Checking the tests, not the code
+
+Two checks answer questions the suite cannot answer about itself. Neither gates a pull request —
+both run in `nightly.yml`, and both are for reading rather than for passing.
+
+**Coverage** exists for one section of its output: which lines of the safety gates does no test
+execute? A gate that is never exercised approves everything, and it does so silently.
+
+```sh
+dotnet test maxdop.slnx -c Release --collect:"XPlat Code Coverage" --results-directory coverage
+python3 tools/coverage-summary.py coverage
+```
+
+The percentage is a lookup tool, not a target. Most of `src/` is node handlers, where an uncovered
+line means a construct nobody wrote a fixture for; driving that number up by writing tests for the
+number is how a suite starts lying.
+
+**Mutation testing** asks the sharper version of the same question: if a gate stopped working, would
+anything notice? Stryker breaks the gates on purpose — inverts a comparison, flips a boundary — and
+reports every change the tests let through.
+
+```sh
+dotnet tool restore
+cd tests/Maxdop.Core.Tests && dotnet stryker
+python3 ../../tools/mutation-summary.py StrykerOutput
+```
+
+Scoped by `tests/Maxdop.Core.Tests/stryker-config.json` to the five gate files, and that scope is
+the design. Mutating the node handlers produces about 6,000 mutants whose survivors are mostly
+layouts no fixture pins — a coverage gap, not a defect, and enough noise to bury the signal. A
+survivor in a gate is different in kind.
+
+Expect about thirty minutes, and expect a score below 100%. Some survivors are cosmetic: which
+token a diagnostic anchors to, where a message truncates. `mutation-summary.py` separates those from
+the rest, because pinning them would make the suite harder to change without making the formatter
+safer. The `break` threshold in the config is a ratchet — currently **78**, set under the **83.17%**
+actually achieved, so weakening a gate's tests fails while cosmetic survivors are left alone. Raise it
+when the score rises; the headroom absorbs run-to-run variance in how many mutants time out rather
+than being killed outright.
+
+**`disable-mix-mutants` is load-bearing. Do not remove it.** It reads like a performance setting
+being switched off, and it is the opposite: without it the run reports a score of ~16% with
+*literally zero* mutants killed in any file, which looks like a damning result about the test suite
+and is entirely an artifact. Stryker activates several mutants per test run when it judges them
+independent; the five gate files all sit on one call path — `SqlFormatter` calls `CommentAttacher`,
+`BatchFormatter` and `RoundTripVerifier` on every format — so that assumption does not hold here and
+results are misattributed. Disabling the mixing is also *faster* in this repo, 30 minutes against 64,
+because nothing is re-run.
+
+Proven by bisection on 2026-09-01: mutating `RoundTripVerifier.cs` alone kills 45 and scores 80.3%,
+reproducibly. The same file inside a five-file run with mixing on kills 0. Same concurrency, same
+tests, same commit.
 
 ## Regenerating the demo images
 

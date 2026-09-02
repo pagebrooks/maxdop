@@ -121,7 +121,7 @@ internal static class BatchFormatter
         // batch, with the printer's keyword claims, which are indices into a single batch's token
         // stream and do not mean anything at file level. This check is looking for tokens that
         // moved, merged or vanished, not for casing.
-        if (!SeamsHold(parser, sql, text, tokens, out var seamDiagnostic))
+        if (!SeamsHold(parser, text, tokens, out var seamDiagnostic))
         {
             return FormatResult.Refuse(sql, seamDiagnostic, text);
         }
@@ -177,9 +177,8 @@ internal static class BatchFormatter
             var goIndex = i;
             var last = i;
 
-            // Absorb `GO <count>` — sqlcmd's "run this batch N times". It belongs to the separator:
-            // left at the head of the next batch it would make that batch unparseable, losing its
-            // formatting for no reason.
+            // Absorb the optional `GO <count>` repeat count into the separator; see the remarks on
+            // this method for why it does not belong to the batch that follows.
             for (var j = i + 1; j < tokens.Count; j++)
             {
                 if (tokens[j].TokenType == TSqlTokenType.Integer)
@@ -239,11 +238,24 @@ internal static class BatchFormatter
     }
 
     /// <summary>
-    /// Re-tokenises input and output and compares the significant tokens, ignoring case.
+    /// Re-tokenises input and output and compares the significant tokens ignoring case, then the
+    /// comment counts.
     /// </summary>
-    private static bool SeamsHold(
+    /// <remarks>
+    /// <para>Each batch has already been verified in full by <see cref="SqlFormatter"/>, so what is
+    /// left to prove is that assembling them lost or gained nothing across a boundary no per-batch
+    /// check can see.</para>
+    /// <para><b>Internal rather than private so the failure paths can be driven directly.</b> Nothing
+    /// a working assembler produces can trip this — which is the point of the assembler, and which
+    /// left every diagnostic below as code no test executed. Handing it deliberately damaged output
+    /// is the only way to prove the seam check refuses rather than waving the damage through.</para>
+    /// </remarks>
+    /// <param name="parser">Parser to re-tokenise with; the same one that produced the input tokens.</param>
+    /// <param name="formatted">The assembled output to check.</param>
+    /// <param name="inputTokens">Token stream of the original file.</param>
+    /// <param name="diagnostic">On failure, what diverged.</param>
+    internal static bool SeamsHold(
         TSqlParser parser,
-        string sql,
         string formatted,
         IList<TSqlParserToken> inputTokens,
         out string diagnostic)

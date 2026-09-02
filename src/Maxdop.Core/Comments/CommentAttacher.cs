@@ -58,11 +58,20 @@ public static class CommentAttacher
 
             // Case order matters more than the cases themselves:
             //
-            // 1. A comment with code to its left belongs to that code, when either
+            // 1. A comment with code to its left belongs to that code, when (c) holds and either
+            //    (a) or (b) does:
             //    (a) it ends its line — it annotates what precedes it, and attaching it to what
             //        follows would move it down a line and change what it appears to describe; or
             //    (b) nothing but whitespace separates it from the preceding node — it sits on that
-            //        node's side of whatever separator comes next.
+            //        node's side of whatever separator comes next;
+            //    (c) and in either case, only when what stands between them is punctuation. A
+            //        *word* in that gap is a keyword, and a keyword there introduces what comes
+            //        next rather than closing off what came before.
+            //        `ELSE /* No instance installed */` describes the else branch; attaching it to
+            //        the preceding node printed it after that branch's `END`, where it read as a
+            //        remark about the end of the *then* branch. Measured at 56 occurrences in one
+            //        corpus file, and invisible to every safety gate, because a comment that moves
+            //        loses nothing and still round-trips.
             //    Test (b) exists because separators are not nodes. In `a /* c */, b` the comment
             //    precedes the comma and in `a, /* c */ b` it follows one, and only the token
             //    positions distinguish them. Getting this wrong walks a comment across an operator:
@@ -71,13 +80,6 @@ public static class CommentAttacher
             //    next, and a comment after a separator belongs on that separator's far side.
             // 3. Nothing follows, so it trails the last thing in the enclosing construct.
             // 4. Nothing on either side: the construct is empty and must emit it itself.
-            //    (c) …but only when what stands between them is punctuation. A *word* in that gap is
-            //        a keyword, and a keyword there introduces what comes next rather than closing
-            //        off what came before. `ELSE /* No instance installed */` describes the else
-            //        branch; attaching it to the preceding node printed it after that branch's `END`,
-            //        where it read as a remark about the end of the *then* branch. Measured at 56
-            //        occurrences in one corpus file, and invisible to every safety gate, because a
-            //        comment that moves loses nothing and still round-trips.
             var belongsToPreceding = preceding is not null
                 && comment.Placement != CommentPlacement.OwnLine
                 && NoWordBetween(tokens, preceding.Last + 1, comment.TokenIndex - 1)
@@ -208,10 +210,6 @@ public static class CommentAttacher
         token.Line + SqlTokens.CountNewLines(token.Text);
 
     /// <summary>
-    /// Whether the token range contains nothing but whitespace and comments — i.e. no separator,
-    /// operator or punctuation sits in it.
-    /// </summary>
-    /// <summary>
     /// Whether a comment sits after the first of the terminating semicolons that end a construct.
     /// </summary>
     /// <remarks>
@@ -268,6 +266,10 @@ public static class CommentAttacher
         return true;
     }
 
+    /// <summary>
+    /// Whether the token range contains nothing but whitespace and comments — i.e. no separator,
+    /// operator or punctuation sits in it.
+    /// </summary>
     private static bool OnlyTriviaBetween(IList<TSqlParserToken> tokens, int fromIndex, int toIndex)
     {
         var to = Math.Min(toIndex, tokens.Count - 1);

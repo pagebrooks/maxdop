@@ -73,6 +73,7 @@ public abstract class Doc
     /// collapses; otherwise they all become newlines. Groups are the only place a layout
     /// decision is made.
     /// </summary>
+    /// <param name="contents">The doc the group wraps.</param>
     /// <param name="shouldBreak">Force the broken layout without measuring.</param>
     /// <param name="id">
     /// Optional identity, so an <see cref="IfBreak"/> or <see cref="IndentIfBreak"/> elsewhere
