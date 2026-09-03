@@ -1,19 +1,22 @@
-# Homebrew formula for maxdop, kept here for the same reason as every other manifest in
-# packaging/: this is a copy of what was pushed to somebody else's repository, so the next
-# version starts from the last one that worked rather than from a blank file.
+# Homebrew formula for maxdop. GENERATED — do not edit by hand.
 #
-# It belongs in https://github.com/pagebrooks/homebrew-tap as Formula/maxdop.rb, which makes
-# the install `brew install pagebrooks/tap/maxdop`.
+# Produced by tools/homebrew-formula.py from the release's SHA256SUMS, and pushed to
+# https://github.com/pagebrooks/homebrew-tap as Formula/maxdop.rb by the `homebrew` job in
+# release.yml. The copy in packaging/ is committed so the current shape is readable without
+# running the generator; editing either copy by hand is overwritten on the next release.
 #
-# Unlike ffpdf.rb in that tap, this builds nothing. maxdop ships a static binary per platform,
-# so the formula picks the right archive and installs the executable out of it. That also means
-# four URLs and four checksums change on every release — see the note at the bottom.
+# Installs as `brew install pagebrooks/tap/maxdop`.
 #
-# homebrew-core is a separate question and not this file: it applies a notability bar that
-# maxdop does not meet yet. A personal tap has no such bar, which is why this can ship today.
+# Unlike ffpdf.rb in that tap, this builds nothing. maxdop ships a static binary per platform, so
+# the formula picks the right archive and installs the executable out of it — which is why four
+# URLs and four checksums change on every release, and why generating it beats bumping it.
+#
+# homebrew-core is a separate question and not this file: it applies a notability bar that maxdop
+# does not meet yet. A personal tap has no such bar, which is why this can ship today.
 class Maxdop < Formula
   desc "T-SQL formatter that runs in CI and verifies its own output"
   homepage "https://github.com/pagebrooks/maxdop"
+  version "0.1.2"
   license "MIT"
 
   livecheck do
@@ -23,12 +26,12 @@ class Maxdop < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.1/maxdop-0.1.1-osx-arm64.tar.gz"
-      sha256 "6aa4564d04e8430961184279ed93134508a6b9c5ea0c36daab98ba3e5a73979d"
+      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.2/maxdop-0.1.2-osx-arm64.tar.gz"
+      sha256 "8e1cd49d526cd62b7f8c0543736c452e9f50361083d6e829d0dd6563a8dc81c0"
     end
     on_intel do
-      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.1/maxdop-0.1.1-osx-x64.tar.gz"
-      sha256 "c7287ec3edf9e8f1317e0bcd693dee255b16f611b5bac5b503614c43cbdd8d5b"
+      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.2/maxdop-0.1.2-osx-x64.tar.gz"
+      sha256 "8f280f715acdd838b3cefd0b777cf0c5880a0ed0d6e5426ccc557da029aa1cf8"
     end
   end
 
@@ -36,12 +39,12 @@ class Maxdop < Formula
   # glibc 2.17, which is older than anything Homebrew supports.
   on_linux do
     on_arm do
-      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.1/maxdop-0.1.1-linux-arm64.tar.gz"
-      sha256 "066583e50d3acc96bd95ce65611077a08028cc90bd5e3dea1e7e333255ceb179"
+      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.2/maxdop-0.1.2-linux-arm64.tar.gz"
+      sha256 "67105bee2e418acce54d821cdba8c9f4053a3256f53f650c634af26ee6458cda"
     end
     on_intel do
-      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.1/maxdop-0.1.1-linux-x64.tar.gz"
-      sha256 "d3d6b29f514b60b8f4e86184ddc4a400055b924523a92fd7d20213fc366742cd"
+      url "https://github.com/pagebrooks/maxdop/releases/download/v0.1.2/maxdop-0.1.2-linux-x64.tar.gz"
+      sha256 "e47d6cdc13e45d4d811930016acc58814857950bdb9b27181cd72cebb97c9c5a"
     end
   end
 
@@ -65,6 +68,3 @@ class Maxdop < Formula
     assert_equal "select a,b from t where x=1;\n", (testpath/"q.sql").read
   end
 end
-
-# Bumping this for a release: four urls, four sha256s from the release's SHA256SUMS, and the
-# version. `brew livecheck maxdop` reports that a new one exists; it does not write the file.

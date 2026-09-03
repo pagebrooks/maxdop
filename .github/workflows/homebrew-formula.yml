@@ -1,0 +1,100 @@
+# Proves the Homebrew formula installs something that runs.
+#
+# The same argument as winget-manifest.yml, one package manager over. `bin.install "maxdop"` relies
+# on each archive holding a single directory that Homebrew has already changed into. Change the
+# archive layout and the formula still installs, still reports success, and leaves no working
+# command — and neither `brew audit` nor a reading of the file would notice.
+#
+# The formula already carries a `test do` block that formats real SQL and checks `--check` exits 1
+# without touching the file. Nothing ran it until this existed.
+#
+# Manual and on pull requests that touch the formula or its generator, not per-push: it downloads
+# release archives, and the formula only changes when a release happens.
+name: homebrew formula
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packaging/homebrew/**'
+      - 'tools/homebrew-formula.py'
+      - '.github/workflows/homebrew-formula.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both platforms the formula claims. A formula that works on macOS and installs nothing on
+        # Linux is exactly the asymmetry a single-platform job would miss, and the `on_linux` block
+        # is the one nobody looks at.
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Homebrew is on the runner
+        run: |
+          set -euo pipefail
+          if ! command -v brew >/dev/null; then
+            echo "::error::brew is not on this runner image; this job needs it installed"
+            exit 1
+          fi
+          brew --version
+
+      # The generator is the source of truth, so the committed copy has to be what it produces.
+      # A hand-edit that drifts from the generator would be reverted by the next release without
+      # anyone noticing it had been made.
+      - name: The committed formula matches the generator
+        run: |
+          set -euo pipefail
+          version=$(grep -oE 'download/v[0-9]+\.[0-9]+\.[0-9]+/' packaging/homebrew/maxdop.rb \
+            | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "formula declares $version"
+
+          gh release download "v$version" --repo pagebrooks/maxdop --pattern SHA256SUMS --dir .
+          python3 tools/homebrew-formula.py "$version" SHA256SUMS > expected.rb
+
+          if ! diff -u packaging/homebrew/maxdop.rb expected.rb; then
+            echo "::error::packaging/homebrew/maxdop.rb is not what tools/homebrew-formula.py produces"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install from the local formula
+        run: brew install --formula ./packaging/homebrew/maxdop.rb
+
+      - name: The installed command runs
+        run: |
+          set -euo pipefail
+          maxdop --version
+
+          # Not that a file landed somewhere: that the binary on PATH is the version the formula
+          # claims to install.
+          expected=$(grep -oE 'download/v[0-9]+\.[0-9]+\.[0-9]+/' packaging/homebrew/maxdop.rb \
+            | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          if ! maxdop --version | grep -q "$expected"; then
+            echo "::error::formula declares $expected, installed binary reports $(maxdop --version | head -1)"
+            exit 1
+          fi
+          echo "::notice::maxdop $expected installs from the formula and runs"
+
+      - name: Run the formula's own test block
+        run: brew test maxdop
+
+      - name: Uninstall cleanly
+        if: always()
+        # A formula that leaves its binary behind is a defect too, and this is the only place it
+        # would show up.
+        run: |
+          brew uninstall --formula maxdop || true
+          if command -v maxdop >/dev/null; then
+            echo "::error::maxdop is still on PATH after uninstall"
+            exit 1
+          fi
