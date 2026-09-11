@@ -17,15 +17,18 @@ binary, so cold start stays around 3.5 ms.
 ## Why
 
 Most SQL formatters tokenise and guess, and lose the shape of your code when it
-matters. maxdop is built on [ScriptDom](https://github.com/microsoft/sqlscriptdom),
-Microsoft's own T-SQL parser — twelve grammars, SQL Server 2000 to 2025 plus
-Fabric DW. It reads stored procedures, `GO` batches and 2000-era syntax the way
-the server does.
+matters. maxdop is built on [ScriptDom](https://github.com/microsoft/SqlScriptDOM),
+Microsoft's own T-SQL parser — twelve grammars, covering every SQL Server
+compatibility level from 2000 to 2025, Fabric DW, and grammar 180, which is newer
+than any announced product year and is the default. It reads stored procedures,
+`GO` batches and 2000-era syntax the way the server does.
 
-It also verifies itself. Every result is re-parsed and compared against your
-input — token stream, tree and comments. If anything differs you get your
-original file back, untouched, and a distinct exit code. Measured over 2,215
-real-world files: zero refusals, zero comments lost.
+It also verifies itself. Every result is re-parsed and its significant token
+stream compared against your input's, with a second check for the comments.
+Identical tokens mean an identical parse tree, so this proves equivalence rather
+than approximating it. If anything differs you get your original file back,
+untouched, and a distinct exit code. Measured over 2,215 real-world files: zero
+refusals, zero comments lost.
 
 ## Use it with pre-commit
 
@@ -54,7 +57,7 @@ a repo formats the same way whoever opens it.
   "maxWidth": 100,
   "indentSize": 4,
   "keywordCase": "upper",
-  "parserVersion": "2022"
+  "parserVersion": "latest"
 }
 ```
 
