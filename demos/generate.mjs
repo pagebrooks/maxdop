@@ -5,8 +5,16 @@
 // layout the formatter no longer produces. `--check` asserts that in CI without
 // rendering anything.
 //
-//   node generate.mjs           regenerate the snapshot, SVGs and PNGs
-//   node generate.mjs --check   fail if the committed snapshot is stale
+//   node generate.mjs           regenerate the snapshots, SVGs and PNGs
+//   node generate.mjs --check   fail if a committed snapshot is stale
+//
+// Two variants are rendered, because one image cannot serve both readers. The
+// width of either is set by its longest line, and GitHub scales a README image
+// down to fit its content column — ~890px on a desktop, but only ~350px on a
+// phone. The wide image's 95-column `after` panel therefore arrives on a phone
+// at roughly 0.42×, putting 14px code in front of the reader at under 6px. The
+// narrow variant exists to be picked up by a `max-width` source in the README's
+// <picture>: same formatter, shorter sample, so it survives the scale-down.
 //
 // Colours come from shiki using VS Code's own Dark+/Light+ themes and TextMate
 // SQL grammar, so the image matches what the editor shows rather than
@@ -38,56 +46,110 @@ const THEMES = {
   light: { theme: 'light-plus', chrome: '#f3f3f3', label: '#616161', border: '#e0e0e0' },
 };
 
+/**
+ * The two renderings, widest first. `suffix` lands in the file name; the README
+ * picks the narrow one with a `max-width` media query.
+ */
+const VARIANTS = [
+  { sample: 'sample.sql', snapshot: 'expected.sql', suffix: '' },
+  { sample: 'sample-narrow.sql', snapshot: 'expected-narrow.sql', suffix: '-narrow', maxColumns: 50 },
+];
+
+/** The widest line in some text, which is what sets a panel's width. */
+function columnsOf(text) {
+  return Math.max(...text.replace(/\n$/, '').split('\n').map((line) => line.length));
+}
+
+/**
+ * A phone gives the README about 350 CSS px. At 50 columns the image is ~433px
+ * wide, so 14px code still reaches the reader above 11px — monospace stops being
+ * readable around 10px. Nothing enforces that on the sample itself, so a later
+ * edit lengthening one line would quietly undo the whole variant.
+ *
+ * Asserted before anything is written, not during rendering: the snapshot and
+ * the four images are written in a loop, so failing partway would leave an
+ * updated expected-narrow.sql beside a stale PNG — and `--check` compares only
+ * the snapshot, so it would then pass while the image it guards was wrong.
+ */
+function assertBudget(variant, columns) {
+  if (variant.maxColumns !== undefined && columns > variant.maxColumns) {
+    fail(
+      `${variant.sample} renders ${columns} columns, over the ${variant.maxColumns}-column budget.\n` +
+        'That image is the one phones get; past this width the text arrives too small to read.\n' +
+        'Shorten the longest line in the sample, or in what maxdop makes of it.',
+    );
+  }
+}
+
 const binary =
   process.env.MAXDOP_BINARY ??
   join(repo, 'editors', 'vscode', 'bin', process.platform === 'win32' ? 'maxdop.exe' : 'maxdop');
 
-const samplePath = join(here, 'sample.sql');
-const snapshotPath = join(here, 'expected.sql');
-const before = readFileSync(samplePath, 'utf8');
-const after = format(samplePath);
+const renders = VARIANTS.map((variant) => {
+  const samplePath = join(here, variant.sample);
+  const before = readFileSync(samplePath, 'utf8');
+  const after = format(samplePath);
+  return {
+    ...variant,
+    snapshotPath: join(here, variant.snapshot),
+    before,
+    after,
+    // Both panels are drawn to one width, so the wider of the two is the image's.
+    columns: Math.max(columnsOf(before), columnsOf(after)),
+  };
+});
 
 if (check) {
-  let snapshot;
-  try {
-    snapshot = readFileSync(snapshotPath, 'utf8');
-  } catch {
-    fail(`no snapshot at ${snapshotPath}. Run "npm run generate".`);
+  for (const render of renders) {
+    let snapshot;
+    try {
+      snapshot = readFileSync(render.snapshotPath, 'utf8');
+    } catch {
+      fail(`no snapshot at ${render.snapshotPath}. Run "npm run generate".`);
+    }
+
+    if (snapshot !== render.after) {
+      fail(
+        `the committed demo output for ${render.sample} no longer matches what maxdop produces.\n` +
+          'The README image is therefore showing layout the formatter does not.\n' +
+          'Run "npm run generate" in demos/ and commit the result.',
+      );
+    }
   }
 
-  if (snapshot !== after) {
-    fail(
-      'the committed demo output no longer matches what maxdop produces.\n' +
-        'The README image is therefore showing layout the formatter does not.\n' +
-        'Run "npm run generate" in demos/ and commit the result.',
-    );
-  }
-
-  console.log('demo: snapshot matches current formatter output');
+  console.log(`demo: ${renders.length} snapshots match current formatter output`);
   process.exit(0);
 }
-
-writeFileSync(snapshotPath, after);
 
 const images = join(repo, 'docs', 'images');
 mkdirSync(images, { recursive: true });
 
-for (const [name, theme] of Object.entries(THEMES)) {
-  const svg = await toSvg(before, after, theme);
-  writeFileSync(join(images, `before-after-${name}.svg`), svg);
+for (const render of renders) {
+  assertBudget(render, render.columns);
+}
 
-  const png = new Resvg(svg, {
-    // 2× so the image stays crisp on a HiDPI screen after the README scales it
-    // down. GitHub serves it at half size; the extra pixels are what stop the
-    // text going soft.
-    fitTo: { mode: 'zoom', value: 2 },
-    font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans Mono' },
-  })
-    .render()
-    .asPng();
+for (const render of renders) {
+  writeFileSync(render.snapshotPath, render.after);
 
-  writeFileSync(join(images, `before-after-${name}.png`), png);
-  console.log(`docs/images/before-after-${name}.png  ${(png.length / 1024).toFixed(0)} KB`);
+  for (const [name, theme] of Object.entries(THEMES)) {
+    const svg = await toSvg(render.before, render.after, theme);
+    writeFileSync(join(images, `before-after-${name}${render.suffix}.svg`), svg);
+
+    const png = new Resvg(svg, {
+      // 2× so the image stays crisp on a HiDPI screen after the README scales it
+      // down. GitHub serves it at half size; the extra pixels are what stop the
+      // text going soft.
+      fitTo: { mode: 'zoom', value: 2 },
+      font: { loadSystemFonts: true, defaultFontFamily: 'DejaVu Sans Mono' },
+    })
+      .render()
+      .asPng();
+
+    writeFileSync(join(images, `before-after-${name}${render.suffix}.png`), png);
+    console.log(
+      `docs/images/before-after-${name}${render.suffix}.png  ${render.columns} cols  ${(png.length / 1024).toFixed(0)} KB`,
+    );
+  }
 }
 
 /** Formats a file with the real CLI, failing loudly rather than rendering something stale. */

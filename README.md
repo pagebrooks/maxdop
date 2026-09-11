@@ -8,7 +8,18 @@
 * No runtime to install. 
 * The formatter is free and MIT licensed, all of it.
 
+<!--
+  Four sources, because this image is art-directed on two axes: colour scheme and
+  width. The narrow pair is a shorter sample rendered by the same generator — a
+  phone gives the README ~350px, and the wide image's 95-column panel scales down
+  into that at roughly 0.42×, which puts 14px code on screen at under 6px.
+
+  First match wins, so the two-condition sources have to stay above the
+  single-condition ones. Regenerate all four with `npm run generate` in demos/.
+-->
 <picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 500px)" srcset="docs/images/before-after-dark-narrow.png">
+  <source media="(max-width: 500px)" srcset="docs/images/before-after-light-narrow.png">
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/before-after-dark.png">
   <img alt="A stored procedure before and after maxdop" src="docs/images/before-after-light.png">
 </picture>
