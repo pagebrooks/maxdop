@@ -59,7 +59,7 @@ whole team formats identically whether they use VS Code, the CLI, or CI:
   "leadingCommas": false,
   "recaseBuiltInFunctions": true,
   "alwaysBreakWhere": false,
-  "parserVersion": "2019",
+  "parserVersion": "latest",
   "exclude": ["db/generated/**", "*.gen.sql"]
 }
 ```
@@ -67,9 +67,9 @@ whole team formats identically whether they use VS Code, the CLI, or CI:
 The nearest `.maxdop.json` at or above the file being formatted wins. `editor.tabSize` and friends
 are deliberately ignored — a file should not format differently because of who opened it.
 
-`parserVersion` pins the grammar, so a 2019-target codebase is not silently reformatted under 2025
-rules. The [full option list](https://github.com/pagebrooks/maxdop#configuration) is in the project
-README.
+`parserVersion` pins the grammar. It defaults to the newest one ScriptDom ships; set it to `"2019"`
+and a 2019-target codebase is never silently reformatted under newer rules. The
+[full option list](https://github.com/pagebrooks/maxdop#configuration) is in the project README.
 
 ## The same formatter runs in your pipeline
 

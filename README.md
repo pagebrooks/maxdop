@@ -122,17 +122,18 @@ SELECT 'a' || 'b';
 </tbody>
 </table>
 
-maxdop is built on [ScriptDom](https://github.com/microsoft/sqlscriptdom), Microsoft's own T-SQL
-parser. It includes twelve grammars, SQL Server 2000 to 2025
-plus Fabric DW. It reads stored procedures, `GO` batches and syntax the way the server does.
+maxdop is built on [ScriptDom](https://github.com/microsoft/SqlScriptDOM), Microsoft's own T-SQL
+parser. It includes twelve grammars: every SQL Server compatibility level from 2000 to 2025, Fabric
+DW, and grammar 180 — newer than any announced product year, and maxdop's default. It reads stored
+procedures, `GO` batches and syntax the way the server does.
 
 ### 2. Microsoft's formatters can't leave the editor
 
-Microsoft's own formatters use ScriptDom, so they have the potential to understand and format your code equally well. However, there formatters are bundled in tightly into their products: 
+Microsoft's own formatters use ScriptDom, so they have the potential to understand and format your code equally well. However, their formatters are bundled tightly into their products: 
 
 ```mermaid
 flowchart TD
-    SD["<b>Microsoft ScriptDom</b> · MIT<br/>12 grammars · SQL Server 2000-2025 + Fabric DW"]
+    SD["<b>Microsoft ScriptDom</b> · MIT<br/>12 grammars · SQL Server 2000-2025 and later · Fabric DW"]
 
     SD --> MX["<b>maxdop</b>"]
     SD --> MS["<b>mssql</b> extension<br/>for VS Code"]
@@ -142,7 +143,7 @@ flowchart TD
     MS --> MSS["wrapped in a<br/><b>292 MB .NET service</b><br/>requires .NET 10"]
     SS --> SSS["wrapped in<br/><b>SSMS itself</b><br/>Windows only"]
 
-    MXS --> MXU["<b>CLI</b> · --check in CI, pre-commit<br/><b>Editors</b> · VS Code, Neovim"]
+    MXS --> MXU["<b>CLI</b> · --check in CI, pre-commit<br/><b>Editors</b> · VS Code, Neovim, Vim, Helix"]
     MSS --> MSU["<b>CLI</b> · none — JSON-RPC only<br/><b>Editors</b> · VS Code only"]
     SSS --> SSU["<b>CLI</b> · none<br/><b>Editors</b> · SSMS only"]
 
@@ -174,7 +175,7 @@ Kit, Ola Hallengren's Maintenance Solution, sp_WhoIsActive, and ScriptDom's own 
 
 ## Installation
 
-Maxdop is compiled as one static executable and works across multiple platforms. No additional runtimes or platform support (.NET, Node, etc.) are needed. It can run inside a text editor as a formatter, as a standalone CLI tool, and it can run in a CI pipeline as a quality gate.
+maxdop is compiled as one static executable and works across multiple platforms. No additional runtimes or platform support (.NET, Node, etc.) are needed. It can run inside a text editor as a formatter, as a standalone CLI tool, and it can run in a CI pipeline as a quality gate.
 
 ## In a Text Editor
 
@@ -205,7 +206,7 @@ the binary for your platform.
 The [PyPI package](https://pypi.org/project/maxdop/) is the same static binary in a wheel, no Python
 runs when you format a file.
 
-**Note:** Support for more package mamanagers are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
+**Note:** Support for more package managers is on the way. If you maintain a package for a manager not listed here, an issue or a PR to
 [`packaging/`](packaging/) is welcome.
 
 ### Manual Install
@@ -278,7 +279,7 @@ One `.maxdop.json` at the repo root, committed next to the code it formats. The 
   "alwaysBreakSelectList": false,
   "alwaysBreakWhere": false,
   "maxBlankLines": 1,
-  "parserVersion": "2022",
+  "parserVersion": "latest",
   "initialQuotedIdentifiers": false,
   "exclude": ["db/generated/**", "*.gen.sql"]
 }
