@@ -13,11 +13,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "maxdop-pre-commit"
-version = "0.1.2"
+version = "0.1.3"
 description = "pre-commit hooks for maxdop, the T-SQL formatter"
 requires-python = ">=3.8"
 license = "MIT"
-dependencies = ["maxdop==0.1.2"]
+dependencies = ["maxdop==0.1.3"]
 
 [project.urls]
 Homepage = "https://github.com/pagebrooks/maxdop"

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3
+
+No change to formatting. A file formatted by 0.1.2 comes out exactly the same.
+
+- A file that cannot be formatted because it does not parse now says so. The status bar shows
+  **maxdop: parse error** while that file is open, with the parser's message in the tooltip; clicking
+  it opens the **maxdop** output channel. It clears once the file formats, and it never pops up a
+  dialog while you are mid-edit.
+- New command: **maxdop: Show Output**.
+- Now also published to Open VSX, for VSCodium, Cursor and other editors that use it.
+- Bundles maxdop 0.1.3.
+
 ## 0.1.2
 
 Formatting changes, so expect a one-time diff the first time you save a file that was last formatted

@@ -6,7 +6,7 @@ Several of these are much larger products. This table only refers to the formatt
 | --- | --- | --- | --- | --- | --- |
 | **maxdop** | **Free — MIT, nothing withheld** | ScriptDom | `.maxdop.json` | **Yes** | Win / macOS / Linux / musl, x64 + arm64 |
 | [SSMS 22.7 formatter](https://learn.microsoft.com/en-us/ssms/scripting/format-t-sql) (Preview) | Free with SSMS | ScriptDom | `.editorconfig` | Not documented | Windows only |
-| [mssql (Microsoft)](https://marketplace.visualstudio.com/items?itemName=ms-mssql.mssql) | Free — MIT | **ScriptDom** (preview, on by default) | — (5 editor settings) | No | cross-platform, x64 + arm64 |
+| [mssql (Microsoft)](https://marketplace.visualstudio.com/items?itemName=ms-mssql.mssql) | Free — MIT | **ScriptDom** (preview, on by default) | `.vscode/settings.json` — 41 settings, VS Code only | No | cross-platform, x64 + arm64 |
 | [SQL Formatter](https://marketplace.visualstudio.com/items?itemName=ReneSaarsoo.sql-formatter-vsc) / [Prettier SQL](https://marketplace.visualstudio.com/items?itemName=inferrinizzard.prettier-sql-vscode) | Free — MIT | `sql-formatter` (token-based) | yes | yes (npm) | cross-platform |
 | [SQLTools](https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools) | Free — MIT | `@sqltools/formatter` | — | No | cross-platform |
 | [Poor Man's T-SQL Formatter](https://poorsql.com) | Free — **AGPL** | own (token-based) | — | Yes | .NET + JS, cross-platform |

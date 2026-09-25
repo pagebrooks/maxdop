@@ -13,10 +13,6 @@ namespace Maxdop.Core.Printing;
 /// </remarks>
 public static class DocDebug
 {
-    /// <param name="propagateBreaks">
-    /// Run break propagation first, so groups display the break decisions the printer will
-    /// actually see. Mutates group state exactly as <see cref="DocPrinter.Print"/> would.
-    /// </param>
     /// <summary>
     /// Indentation stops growing past this depth, and deeper nodes are prefixed with their
     /// actual depth instead. Without a cap, describing a doc thousands of levels deep would
@@ -24,6 +20,14 @@ public static class DocDebug
     /// </summary>
     private const int MaxIndentDepth = 40;
 
+    /// <summary>
+    /// Renders the tree rooted at <paramref name="doc"/> as indented text.
+    /// </summary>
+    /// <param name="doc">Root of the tree to render.</param>
+    /// <param name="propagateBreaks">
+    /// Run break propagation first, so groups display the break decisions the printer will
+    /// actually see. Mutates group state exactly as <see cref="DocPrinter.Print"/> would.
+    /// </param>
     public static string Describe(Doc doc, bool propagateBreaks = false)
     {
         ArgumentNullException.ThrowIfNull(doc);

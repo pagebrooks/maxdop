@@ -6,7 +6,8 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 namespace Maxdop.Core.Formatting;
 
 /// <summary>
-/// Formats T-SQL. The one entry point everything else — CLI, LSP, tests — goes through.
+/// Formats T-SQL. The one entry point the CLI and the tests go through, and the seam an LSP
+/// server would sit on when one exists.
 /// </summary>
 public static class SqlFormatter
 {
@@ -56,12 +57,41 @@ public static class SqlFormatter
         var formatted = DocPrinter.Print(printer.Print(root), printOptions);
         formatted = MatchTrailingNewLine(formatted, sql, printOptions.NewLine);
 
-        // --- verification -----------------------------------------------------------
-        //
-        // Everything below is the safety net, and it is deliberately not
-        // optional: there is no flag to turn it off. The cost is one extra parse — around 1.2ms
-        // for a 2.8KB procedure, measured during the spike — which buys the only claim that
-        // makes an automated formatter safe to point at a production codebase.
+        return VerifyOrRefuse(sql, formatted, root, comments, options, printer.KeywordCasedTokens);
+    }
+
+    /// <summary>
+    /// The three gates, applied to candidate output: it must re-parse, mean what the input meant,
+    /// and carry the same comments. Any failure returns the input byte for byte.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the safety net, and it is deliberately not optional: there is no flag to turn
+    /// it off. The cost is one extra parse — around 1.2ms for a 2.8KB procedure, measured during the
+    /// spike — which buys the only claim that makes an automated formatter safe to point at a
+    /// production codebase.</para>
+    /// <para><b>Why this is a method rather than the tail of <see cref="Format"/>.</b> Nothing a
+    /// working printer produces can trip these gates — that is what the printer is for — so the
+    /// refusal paths were the one part of the formatter no test executed, and the promise they keep
+    /// is the largest one the project makes: a maxdop bug never modifies a file. Separated so the
+    /// gates can be handed output that is deliberately wrong, which is the only way to prove the
+    /// refusal returns the input rather than the damage.</para>
+    /// </remarks>
+    /// <param name="sql">The original input, returned unchanged on any refusal.</param>
+    /// <param name="formatted">Candidate output to verify.</param>
+    /// <param name="original">The input as parsed, to compare against.</param>
+    /// <param name="comments">Comments attached to the input, to check for survival.</param>
+    /// <param name="options">Formatting options; the parser version is read from these.</param>
+    /// <param name="keywordPositions">
+    /// Token positions the printer recased as keywords, so exactly those may differ in case.
+    /// </param>
+    internal static FormatResult VerifyOrRefuse(
+        string sql,
+        string formatted,
+        TSqlFragment original,
+        CommentMap comments,
+        FormatOptions options,
+        IReadOnlySet<int> keywordPositions)
+    {
         var reparsed = Parse(formatted, options, out var reparseErrors);
         if (reparseErrors.Count > 0)
         {
@@ -75,7 +105,7 @@ public static class SqlFormatter
         // Invariant #1: the output means what the input meant.
         // The printer's keyword-position claims travel with the verification, not as a global setting:
         // it may only relax the comparison for tokens it actually recased.
-        if (!RoundTripVerifier.Verify(root, reparsed, out var roundTripDiagnostic, printer.KeywordCasedTokens))
+        if (!RoundTripVerifier.Verify(original, reparsed, out var roundTripDiagnostic, keywordPositions))
         {
             return FormatResult.Refuse(sql, roundTripDiagnostic, formatted);
         }

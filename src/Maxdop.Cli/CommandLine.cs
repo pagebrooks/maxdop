@@ -148,7 +148,8 @@ internal sealed record CommandLine
                     continue;
 
                 case "--range":
-                    // Reserved in §3 so the flag cannot be given a different meaning later. Rejected
+                    // Reserved by the CLI contract so the flag cannot be given a different meaning
+                    // later. Rejected
                     // rather than ignored: silently formatting the whole file when the caller asked
                     // for a range would corrupt an editor's "format selection".
                     error = "--range is reserved and not implemented yet. "

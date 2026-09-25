@@ -200,6 +200,7 @@ the binary for your platform.
 | | |
 | --- | --- |
 | **Homebrew** (macOS, Linux) | `brew install pagebrooks/tap/maxdop` |
+| **WinGet** (Windows) | `winget install --id pagebrooks.maxdop -e` |
 | **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
 | **pip / uv** (any platform) | `pip install maxdop`<br>`uvx maxdop --check src/` |
 
@@ -217,7 +218,7 @@ Pick your platform from [the latest release](../../releases/latest) — `linux-x
 **macOS and Linux**
 
 ```sh
-V=0.1.2; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
+V=0.1.3; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
 
 curl -fsSLO "https://github.com/pagebrooks/maxdop/releases/download/v$V/maxdop-$V-$RID.tar.gz"
 tar -xzf "maxdop-$V-$RID.tar.gz"
@@ -254,7 +255,7 @@ maxdop --write-baseline src/                              # adopt on a codebase 
 ```yaml
 repos:
   - repo: https://github.com/pagebrooks/maxdop
-    rev: v0.1.2
+    rev: v0.1.3
     hooks:
       - id: maxdop          # rewrites files, then fails so you re-stage
       - id: maxdop-check    # fails without touching anything

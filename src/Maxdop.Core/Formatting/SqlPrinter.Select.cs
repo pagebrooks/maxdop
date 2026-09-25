@@ -151,6 +151,7 @@ public sealed partial class SqlPrinter
 
     // --- query expressions -----------------------------------------------------------
 
+    /// <param name="query">The query specification to print.</param>
     /// <param name="into">
     /// The <c>INTO &lt;table&gt;</c> target, when the enclosing statement has one. It belongs to the
     /// statement in the AST but is written inside the query, so only the statement handler can

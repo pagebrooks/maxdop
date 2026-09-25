@@ -21,6 +21,13 @@ namespace Maxdop.Core.Text;
 /// <para>Decoders are constructed with <c>throwOnInvalidBytes: true</c> on purpose. The default
 /// silently substitutes U+FFFD for anything undecodable, which turns a Windows-1252 <c>é</c> into a
 /// replacement character and then writes it back — corrupting the file while reporting success.</para>
+/// <para><b>The <c>byteOrderMark</c> and <c>encoderShouldEmitUTF8Identifier</c> arguments below are
+/// inert, and are passed for symmetry only.</b> They govern <c>Encoding.GetPreamble()</c>, which this
+/// class never calls: <see cref="Encode"/> writes the mark itself from <see cref="Bom"/> and
+/// <see cref="Decode"/> strips it by slicing. Worth stating because the flags read as though they are
+/// what preserves the BOM, and they are not — dropping the explicit handling in favour of them would
+/// silently stop emitting the mark, since <c>GetBytes</c> never includes a preamble. Mutating either
+/// flag changes nothing observable, which is why they show as surviving mutants.</para>
 /// </remarks>
 public sealed class SourceEncoding
 {

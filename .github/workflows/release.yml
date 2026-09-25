@@ -559,6 +559,70 @@ jobs:
           # the VSIXs, hence the explicit glob.
           npx ovsx publish --skip-duplicate --packagePath "$GITHUB_WORKSPACE"/vsix/*.vsix
 
+  homebrew:
+    # Pushes the formula to pagebrooks/homebrew-tap so `brew install pagebrooks/tap/maxdop` picks up
+    # the release without anyone editing four URLs and four checksums by hand.
+    #
+    # Off until PUBLISH_HOMEBREW is set, like the other three publishers. Unlike them this one is
+    # recoverable — a bad formula is a commit that can be reverted, not a version that can never be
+    # replaced — but it writes to a repository this workflow does not own, so it waits for the same
+    # signal.
+    #
+    # The checksums come out of the release's own SHA256SUMS, which the release job already verified
+    # with `sha256sum -c`. Nothing here re-downloads or re-hashes an archive, so the formula cannot
+    # disagree with the release it points at.
+    #
+    # GITHUB_TOKEN cannot write to another repository, hence HOMEBREW_TAP_PAT — a fine-grained token
+    # whose only scope is contents:write on the tap.
+    name: homebrew
+    needs: [version, release]
+    if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_HOMEBREW == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Fetch the release checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "v${{ needs.version.outputs.version }}" --pattern SHA256SUMS --dir .
+
+      - name: Render the formula
+        run: |
+          set -euo pipefail
+          python3 tools/homebrew-formula.py "${{ needs.version.outputs.version }}" SHA256SUMS \
+            > maxdop.rb
+          cat maxdop.rb
+
+      - name: Check out the tap
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: pagebrooks/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_PAT }}
+          path: tap
+
+      - name: Push it
+        working-directory: tap
+        run: |
+          set -euo pipefail
+
+          # Only this formula. ffpdf.rb lives in the same tap and has nothing to do with a maxdop
+          # release.
+          cp ../maxdop.rb Formula/maxdop.rb
+
+          # Nothing to do if the formula is already what a re-run would produce, which keeps a
+          # re-dispatched tag from making an empty commit.
+          if git diff --quiet -- Formula/maxdop.rb; then
+            echo "::notice::Formula/maxdop.rb already matches v${{ needs.version.outputs.version }}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/maxdop.rb
+          git commit -m "maxdop: update to ${{ needs.version.outputs.version }}"
+          git push
+          echo "::notice::pushed maxdop ${{ needs.version.outputs.version }} to the tap"
+
   pypi:
     # Off until someone sets the PUBLISH_PYPI repository variable, for the same
     # reason as the Marketplace job: a PyPI version can never be replaced, only

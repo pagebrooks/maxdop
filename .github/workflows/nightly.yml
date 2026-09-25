@@ -13,12 +13,15 @@ on:
     - cron: '17 3 * * *'
     # Parser drift, Mondays only — ScriptDom ships every few months, so daily would be noise.
     - cron: '17 4 * * 1'
+    # Mutation testing, Mondays. Twenty-odd minutes, and what it measures — whether the tests
+    # would notice a gate breaking — moves only when the tests or the gates do.
+    - cron: '17 5 * * 1'
   workflow_dispatch:
     inputs:
       job:
         description: Which check to run
         type: choice
-        options: [all, corpus, scriptdom, deps]
+        options: [all, corpus, scriptdom, deps, mutation]
         default: all
 
 permissions:
@@ -162,6 +165,60 @@ jobs:
         run: |
           echo 'A newer ScriptDom exists. If the run above is green the bump is safe; if the grammar' >> "$GITHUB_STEP_SUMMARY"
           echo 'ratchet failed it names the node types that appeared or vanished — that list is the review.' >> "$GITHUB_STEP_SUMMARY"
+
+  mutation:
+    # Asks the one question coverage cannot: if a safety gate stopped working, would anything
+    # notice? Every other suite proves the gates pass on good output. This deliberately breaks them
+    # — inverts a comparison, flips a boundary, drops a negation — and reports each change no test
+    # objected to.
+    #
+    # Scoped to the five gate files by tests/Maxdop.Core.Tests/stryker-config.json, and that scope
+    # is the whole design. Mutating the node handlers produces ~6000 mutants whose survivors are
+    # almost all layouts no fixture pins — a coverage gap, not a defect, and enough noise to bury
+    # the signal. A survivor in a gate is different in kind: it means the gate could silently stop
+    # verifying and the suite would stay green, which is the one failure the formatter cannot
+    # detect from its own output.
+    #
+    # A canary, not a gate. `break` in the config is the ratchet: set just under the score actually
+    # achieved, so weakening a gate's tests fails while cosmetic survivors are left alone. 100% is
+    # not the target — pinning which token a diagnostic anchors to would make the suite harder to
+    # change without making the formatter safer.
+    if: >-
+      (github.event_name != 'schedule' && (inputs.job == 'all' || inputs.job == 'mutation'))
+      || github.event.schedule == '17 5 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/dotnet
+
+      # Pinned in .config/dotnet-tools.json for the same reason the SDK is pinned in mise.toml: a
+      # mutation score measured against whichever Stryker the runner happened to resolve is not
+      # comparable with last week's.
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Mutate the safety gates
+        working-directory: tests/Maxdop.Core.Tests
+        run: dotnet stryker --reporter progress --reporter html --reporter json
+
+      - name: Summary
+        if: always()
+        working-directory: tests/Maxdop.Core.Tests
+        run: |
+          {
+            echo '## Mutation'
+            echo
+            python3 "$GITHUB_WORKSPACE/tools/mutation-summary.py" StrykerOutput
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: mutation-report
+          path: tests/Maxdop.Core.Tests/StrykerOutput/**/reports/*
+          retention-days: 14
 
   deps:
     # Nightly, because advisories are published on their own schedule rather than on ours. This is

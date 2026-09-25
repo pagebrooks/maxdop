@@ -8,14 +8,14 @@ namespace Maxdop.Core.Formatting;
 /// and the claim the whole project rests on: "it cannot break your code."
 /// </summary>
 /// <remarks>
-/// <para><b>Why token sequences rather than an AST walk.</b> §2 describes this as asserting AST
-/// equivalence. Comparing the <em>significant token sequences</em> delivers that guarantee and is
+/// <para><b>Why token sequences rather than an AST walk.</b> The original design described this
+/// as asserting AST equivalence. Comparing the <em>significant token sequences</em> delivers that guarantee and is
 /// strictly stronger: the parser is a deterministic function of its token stream, so two inputs
 /// with identical significant tokens necessarily produce identical ASTs. The converse does not
 /// hold — different tokens can yield the same AST — which makes this the conservative direction.
 /// </para>
 /// <para>It is also the only version that is actually implementable here. ScriptDom exposes no
-/// structural comparer, and writing one across 1376 node types is not credible; the reflective
+/// structural comparer, and writing one across 1,074 node types is not credible; the reflective
 /// alternative is exactly the pattern NativeAOT forbids. A node-type fingerprint built from the
 /// visitor would compile, but it would miss the failures that matter most — two
 /// <c>BooleanComparisonExpression</c>s have the same shape whether the operator is <c>=</c> or
@@ -46,6 +46,8 @@ public static class RoundTripVerifier
     /// <summary>
     /// Compares two parsed fragments for semantic equivalence.
     /// </summary>
+    /// <param name="original">The input as parsed, before formatting.</param>
+    /// <param name="formatted">The formatter's output, re-parsed.</param>
     /// <param name="diagnostic">On failure, where and how they diverge.</param>
     /// <param name="keywordPositions">
     /// Indices into the <em>original</em>'s token stream that the printer recased as keywords even
@@ -136,6 +138,7 @@ public static class RoundTripVerifier
     /// <summary>
     /// Tokens the parser actually consumes: everything but whitespace, comments and end-of-file.
     /// </summary>
+    /// <param name="fragment">The parsed fragment whose token stream is filtered.</param>
     /// <param name="indices">
     /// Each returned token's index in the full stream, so a caller holding token-index-keyed
     /// information can look it up. The comparison itself walks the two significant sequences

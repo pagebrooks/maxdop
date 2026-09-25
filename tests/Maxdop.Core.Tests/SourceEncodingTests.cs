@@ -153,6 +153,40 @@ public class SourceEncodingTests
         Assert.False(SourceEncoding.Utf8NoBom.CanRoundTrip(overlong));
     }
 
+    [Theory]
+    [InlineData("UTF-8 with BOM", new byte[] { 0xEF, 0xBB, 0xBF, 0x80 })]
+    [InlineData("UTF-8 with BOM", new byte[] { 0xEF, 0xBB, 0xBF, 0xE2, 0x82 })]
+    [InlineData("UTF-16 LE with BOM", new byte[] { 0xFF, 0xFE, 0x00, 0xD8 })]
+    [InlineData("UTF-16 LE with BOM", new byte[] { 0xFF, 0xFE, 0x41, 0x00, 0x41 })]
+    [InlineData("UTF-16 BE with BOM", new byte[] { 0xFE, 0xFF, 0xD8, 0x00 })]
+    [InlineData("UTF-32 LE with BOM", new byte[] { 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00 })]
+    [InlineData("UTF-32 LE with BOM", new byte[] { 0xFF, 0xFE, 0x00, 0x00, 0x00, 0xD8, 0x00, 0x00 })]
+    [InlineData("UTF-32 BE with BOM", new byte[] { 0x00, 0x00, 0xFE, 0xFF, 0x00, 0x11, 0x00, 0x00 })]
+    public void EveryEncodingRejectsUndecodableBytesRatherThanSubstituting(string expectedName, byte[] bytes)
+    {
+        // The guarantee this class exists for was only ever proven for UTF-8 without a BOM. Every
+        // decoder is constructed with throwOnInvalidBytes on purpose, and until now nothing held four
+        // of the five to it: flipping any one of those flags to false left the whole suite green
+        // while that encoding silently swapped in U+FFFD and wrote the corruption back.
+        //
+        // The cases are the ways each encoding can be malformed rather than a uniform sample: an
+        // invalid UTF-8 start byte and a truncated sequence; an unpaired surrogate and an odd byte
+        // count in UTF-16; a scalar past U+10FFFF and a surrogate value in UTF-32.
+        var encoding = SourceEncoding.Detect(bytes);
+
+        Assert.Equal(expectedName, encoding.Name);
+        Assert.Throws<DecoderFallbackException>(() => encoding.Decode(bytes));
+
+        // And the --write gate agrees, which is the half that actually protects a file.
+        Assert.False(encoding.CanRoundTrip(bytes));
+    }
+
+    [Fact]
+    public void EncodingNullIsRejected()
+    {
+        Assert.Throws<ArgumentNullException>(() => SourceEncoding.Utf8NoBom.Encode(null!));
+    }
+
     // --- end to end through the formatter ---------------------------------------------
 
     [Fact]

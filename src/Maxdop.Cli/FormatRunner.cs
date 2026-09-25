@@ -35,7 +35,7 @@ internal sealed class FormatRunner(
 
     internal RunOutcome RunStdin(string? stdinFilePath)
     {
-        // stdin is decoded UTF-8 by contract (§3): editors hand over a decoded buffer, so there are
+        // stdin is decoded UTF-8 by contract: editors hand over a decoded buffer, so there are
         // no bytes to preserve here and no BOM to worry about.
         string input;
         using (var reader = new StreamReader(Console.OpenStandardInput(), Streams.Utf8))
@@ -140,7 +140,9 @@ internal sealed class FormatRunner(
             case Mode.Write when result.Changed:
                 try
                 {
-                    File.WriteAllBytes(file, encoding.Encode(result.Output));
+                    // Not File.WriteAllBytes: that truncates before it writes, so a failed write
+                    // destroys the file it was formatting. See AtomicFile.
+                    AtomicFile.Write(file, encoding.Encode(result.Output));
                     Console.Error.WriteLine($"maxdop: {file} formatted");
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
