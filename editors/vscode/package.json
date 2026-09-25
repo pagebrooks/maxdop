@@ -66,6 +66,11 @@
         "command": "maxdop.formatDocument",
         "title": "Format Document with maxdop",
         "category": "maxdop"
+      },
+      {
+        "command": "maxdop.showOutput",
+        "title": "Show Output",
+        "category": "maxdop"
       }
     ],
     "configurationDefaults": {

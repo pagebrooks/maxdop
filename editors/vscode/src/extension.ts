@@ -4,10 +4,33 @@ import * as vscode from 'vscode';
 import { format } from './maxdop';
 
 let output: vscode.OutputChannel;
+let status: vscode.StatusBarItem;
+
+/**
+ * The document the status item is reporting on.
+ *
+ * The item itself is global while what it says is about one file, so without this it would follow
+ * the user to the next document and claim a parse error in a file that has none.
+ */
+let statusFor: string | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   output = vscode.window.createOutputChannel('maxdop');
   context.subscriptions.push(output);
+
+  // A file that does not parse comes back untouched, and until now the only trace of that was a
+  // line in an output channel nobody knows to open — so pressing Format did nothing, silently, and
+  // that is the moment a user decides the extension is broken. A modal on every keystroke-triggered
+  // format-on-save would be worse, which is why this is passive: it states the situation and waits.
+  status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  status.command = 'maxdop.showOutput';
+  context.subscriptions.push(status);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('maxdop.showOutput', () => output.show(true)),
+  );
+
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => syncStatus()));
 
   void ensureExecutable(context);
 
@@ -63,17 +86,20 @@ async function provideEdits(
       //
       // An unchanged document returns no edits at all, which keeps VS Code from
       // marking a clean file dirty on format-on-save.
+      clearStatus(document);
       return outcome.text === text ? [] : [vscode.TextEdit.replace(fullRange(document), outcome.text)];
 
     case 'declined':
-      // The input's problem, and the file is untouched. A modal error on every
-      // keystroke-triggered format-on-save would be intolerable, so this goes to
-      // the output channel and the status bar's formatter notice.
+      // The input's problem, and the file is untouched. The full diagnostic — line, column and the
+      // parser's own message — goes to the output channel, and the status item is the signpost to
+      // it.
       output.appendLine(`${document.fileName}: ${outcome.message}`);
+      noteParseError(document, outcome.message);
       return [];
 
     case 'failed':
       output.appendLine(`${document.fileName}: ${outcome.message}`);
+      clearStatus(document);
       void vscode.window.showErrorMessage(`maxdop: ${outcome.message}`, 'Show Output').then((choice) => {
         if (choice === 'Show Output') {
           output.show(true);
@@ -107,6 +133,35 @@ async function formatActiveEditor(context: vscode.ExtensionContext): Promise<voi
     }
   } finally {
     source.dispose();
+  }
+}
+
+/** Records that this document did not parse, and shows the notice if it is the one on screen. */
+function noteParseError(document: vscode.TextDocument, message: string): void {
+  statusFor = document.uri.toString();
+
+  // The warning glyph without `statusBarItem.warningBackground`: an orange bar on every save while
+  // a statement is half-typed is the loud version of the modal this exists to avoid.
+  status.text = '$(warning) maxdop: parse error';
+  status.tooltip = `${message}\n\nThe file was left unchanged. Click to open the maxdop output.`;
+  syncStatus();
+}
+
+/** Drops the notice when the document it referred to formats, or fails for some other reason. */
+function clearStatus(document: vscode.TextDocument): void {
+  if (statusFor === document.uri.toString()) {
+    statusFor = undefined;
+  }
+
+  syncStatus();
+}
+
+/** Shown only while the document it refers to is the active one. */
+function syncStatus(): void {
+  if (statusFor !== undefined && statusFor === vscode.window.activeTextEditor?.document.uri.toString()) {
+    status.show();
+  } else {
+    status.hide();
   }
 }
 

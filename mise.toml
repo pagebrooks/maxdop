@@ -18,3 +18,7 @@ node = "22"
 # a broken GIF that still renders, which is the kind that gets committed.
 neovim = "0.11.7"
 helix = "25.07.1"
+
+# Generates and submits the WinGet manifests in packaging/winget/ to
+# microsoft/winget-pkgs. Pinned to the version that wrote the existing ones.
+"github:russellbanks/Komac" = "2.16.0"

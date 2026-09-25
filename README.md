@@ -188,13 +188,14 @@ the binary for your platform.
 | | |
 | --- | --- |
 | **Homebrew** (macOS, Linux) | `brew install pagebrooks/tap/maxdop` |
+| **WinGet** (Windows) | `winget install --id pagebrooks.maxdop -e` |
 | **Scoop** (Windows) | `scoop bucket add maxdop https://github.com/pagebrooks/scoop-maxdop`<br>`scoop install maxdop` |
 | **pip / uv** (any platform) | `pip install maxdop`<br>`uvx maxdop --check src/` |
 
 The [PyPI package](https://pypi.org/project/maxdop/) is the same static binary in a wheel, no Python
 runs when you format a file.
 
-**Note:** Support for more package mamanagers are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
+**Note:** Support for more package managers are on the way. If you maintain a package for a manager not listed here, an issue or a PR to
 [`packaging/`](packaging/) is welcome.
 
 ### Manual Install
