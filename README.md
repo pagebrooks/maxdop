@@ -206,7 +206,7 @@ Pick your platform from [the latest release](../../releases/latest) — `linux-x
 **macOS and Linux**
 
 ```sh
-V=0.1.2; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
+V=0.1.3; RID=linux-x64          # or linux-arm64, linux-musl-x64, osx-x64, osx-arm64
 
 curl -fsSLO "https://github.com/pagebrooks/maxdop/releases/download/v$V/maxdop-$V-$RID.tar.gz"
 tar -xzf "maxdop-$V-$RID.tar.gz"
@@ -243,7 +243,7 @@ maxdop --write-baseline src/                              # adopt on a codebase 
 ```yaml
 repos:
   - repo: https://github.com/pagebrooks/maxdop
-    rev: v0.1.2
+    rev: v0.1.3
     hooks:
       - id: maxdop          # rewrites files, then fails so you re-stage
       - id: maxdop-check    # fails without touching anything
