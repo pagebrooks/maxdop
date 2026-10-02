@@ -6,7 +6,7 @@ Several of these are much larger products. This table only refers to the formatt
 | --- | --- | --- | --- | --- | --- |
 | **maxdop** | **Free — MIT, nothing withheld** | ScriptDom | `.maxdop.json` | **Yes** | Win / macOS / Linux / musl, x64 + arm64 |
 | [SSMS 22.7 formatter](https://learn.microsoft.com/en-us/ssms/scripting/format-t-sql) (Preview) | Free with SSMS | ScriptDom | `.editorconfig` | Not documented | Windows only |
-| [mssql (Microsoft)](https://marketplace.visualstudio.com/items?itemName=ms-mssql.mssql) | Free — MIT | **ScriptDom** (preview, on by default) | `.vscode/settings.json` — 41 settings, VS Code only | No | cross-platform, x64 + arm64 |
+| [mssql (Microsoft)](https://marketplace.visualstudio.com/items?itemName=ms-mssql.mssql) | Free — MIT | **ScriptDom** (GA since 1.46) | `.vscode/settings.json` — 56 settings, VS Code only | No | cross-platform, x64 + arm64 |
 | [SQL Formatter](https://marketplace.visualstudio.com/items?itemName=ReneSaarsoo.sql-formatter-vsc) / [Prettier SQL](https://marketplace.visualstudio.com/items?itemName=inferrinizzard.prettier-sql-vscode) | Free — MIT | `sql-formatter` (token-based) | yes | yes (npm) | cross-platform |
 | [SQLTools](https://marketplace.visualstudio.com/items?itemName=mtxr.sqltools) | Free — MIT | `@sqltools/formatter` | — | No | cross-platform |
 | [Poor Man's T-SQL Formatter](https://poorsql.com) | Free — **AGPL** | own (token-based) | — | Yes | .NET + JS, cross-platform |
@@ -19,8 +19,8 @@ Several of these are much larger products. This table only refers to the formatt
 # Microsoft's ScriptDom-based Formatters
 
 SSMS 22.7 and Microsoft's mssql VS Code extension both run ScriptDom. The extension ships
-`Microsoft.SqlServer.TransactSql.ScriptDom.dll` inside its language service and turns its new
-formatter on by default.
+`Microsoft.SqlServer.TransactSql.ScriptDom.dll` inside its language service. Its ScriptDom formatter
+went GA in 1.46 (September 2026) and replaced the extension's older formatter outright.
 
 **A formatter with no command line cannot gate a pull request.** Microsoft's runs inside a
 language-service process whose reason to exist is serving an editor. There is no `--check`, no exit
