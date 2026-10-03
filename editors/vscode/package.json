@@ -89,7 +89,7 @@
     "test:integration": "npm run compile && node scripts/run-integration.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.20.3",
+    "@types/node": "^22.20.4",
     "@types/vscode": "~1.90.0",
     "@vscode/vsce": "^4.0.0",
     "ovsx": "^1.2.0",
