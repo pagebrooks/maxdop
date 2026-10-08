@@ -94,5 +94,10 @@
     "@vscode/vsce": "^4.0.0",
     "ovsx": "^1.2.0",
     "typescript": "^5.6.0"
+  },
+  "overrides": {
+    "ovsx": {
+      "@vscode/vsce": "$@vscode/vsce"
+    }
   }
 }
