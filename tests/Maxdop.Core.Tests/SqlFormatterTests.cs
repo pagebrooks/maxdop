@@ -538,6 +538,26 @@ public class SqlFormatterTests
         Assert.Equal(FormatStatus.Formatted, result.Status);
     }
 
+    [Theory]
+    // ScriptDom 180.140.0 gave the Fabric DW grammar's seven scalar AI functions an ON ERROR clause,
+    // which is where AIErrorOnErrorClause, AINullOnErrorClause and AIDefaultOnErrorClause come from
+    // on the grammar ratchet. Those calls have no handler — they only exist under this one grammar,
+    // and arrive as a plain FunctionCall everywhere else — so the whole expression is passed through.
+    // What this pins is that the clause survives inside it, verbatim, and that nothing around it
+    // stops formatting.
+    [InlineData("AI_SUMMARIZE(t.body ERROR ON ERROR)")]
+    [InlineData("AI_CLASSIFY(t.body, 'spam', 'ham' NULL ON ERROR)")]
+    [InlineData("AI_TRANSLATE(t.body, 'fr' DEFAULT N'n/a' ON ERROR)")]
+    public void FabricDwAiOnErrorClausesSurvive(string call)
+    {
+        var options = FormatOptions.Default with { ParserVersion = ParserFactory.FabricDwVersion };
+
+        var once = Format($"select {call} as x\nfrom dbo.t as t;", options);
+
+        Assert.Equal($"SELECT {call} AS x FROM dbo.t AS t;", once);
+        Assert.Equal(once, Format(once, options));
+    }
+
     [Fact]
     public void UnsupportedParserVersionThrows()
     {
