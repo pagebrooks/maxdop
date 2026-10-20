@@ -25,7 +25,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <ScriptDomVersion>180.102.0</ScriptDomVersion>
+    <ScriptDomVersion>180.140.0</ScriptDomVersion>
   </PropertyGroup>
 
 </Project>
