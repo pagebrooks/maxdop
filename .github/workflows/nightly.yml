@@ -23,6 +23,15 @@ on:
         type: choice
         options: [all, corpus, scriptdom, deps, mutation]
         default: all
+  # Mutation testing on the pull requests that can break it without touching a line of the code it
+  # measures. Dependabot merged Stryker 5 on 8 October; Stryker 5 refuses to start on a config that
+  # 4.x accepted, and nothing noticed until the Monday run, and nothing told anyone about that run.
+  # On these paths the mutation job runs as an ordinary PR check, so a tool bump that stops it
+  # starting fails on its own pull request. Every other job here stays scheduled-only.
+  pull_request:
+    paths:
+      - .config/dotnet-tools.json
+      - tests/Maxdop.Core.Tests/stryker-config.json
 
 permissions:
   contents: read
@@ -184,8 +193,9 @@ jobs:
     # not the target — pinning which token a diagnostic anchors to would make the suite harder to
     # change without making the formatter safer.
     if: >-
-      (github.event_name != 'schedule' && (inputs.job == 'all' || inputs.job == 'mutation'))
+      (github.event_name == 'workflow_dispatch' && (inputs.job == 'all' || inputs.job == 'mutation'))
       || github.event.schedule == '17 5 * * 1'
+      || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -241,7 +251,19 @@ jobs:
       - uses: ./.github/actions/dotnet
       - uses: ./.github/actions/node
 
+      # The one dependency neither scanner below can see. The release binaries are Native AOT, so
+      # the .NET runtime is compiled into them, and which runtime that is follows the SDK pinned in
+      # mise.toml. `dotnet list --vulnerable` does not list the AOT compiler pack, and NuGet audit
+      # flags it only after a GHSA lands and only on a restore that pulls the pack. That gap let the
+      # pin fall four security runtimes behind, and v0.1.4's first tag build was what found it.
+      # Microsoft's release metadata knows on the day a security runtime ships.
+      - name: .NET security releases
+        run: python3 tools/dotnet-security-check.py
+
+      # `!cancelled()` on each scanner so one red finding does not hide the others: without it a
+      # missing .NET patch would skip the NuGet and npm scans until it was fixed.
       - name: NuGet advisories
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           dotnet list maxdop.slnx package --vulnerable --include-transitive | tee nuget.txt
@@ -257,6 +279,7 @@ jobs:
           echo 'No vulnerable NuGet packages.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: npm advisories
+        if: ${{ !cancelled() }}
         working-directory: editors/vscode
         run: |
           # No `npm ci` first: audit reads package-lock.json directly, so this job never installs
@@ -265,3 +288,27 @@ jobs:
           # the VSIX, but they build and package it, which is a supply-chain position of its own.
           npm audit --audit-level=moderate
           echo 'No npm advisories at moderate or above.' >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    # Turns a red check into an open issue labelled nightly-red, and closes it when the check passes
+    # again. Not on pull requests, where the check result is already in front of the author. Manual
+    # runs only from main, so a dispatch on a feature branch cannot open or close an issue about main.
+    # See .github/actions/report-scheduled for why an issue rather than the default email.
+    name: report
+    needs: [corpus, scriptdom, mutation, deps]
+    if: >-
+      always()
+      && (github.event_name == 'schedule'
+          || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/report-scheduled
+        with:
+          results: ${{ toJSON(needs) }}

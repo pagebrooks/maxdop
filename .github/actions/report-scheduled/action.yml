@@ -1,0 +1,95 @@
+name: Report a scheduled run
+description: >-
+  Turns the result of each check in a scheduled run into a GitHub issue: opens
+  one labelled nightly-red when a check fails, comments on it while the check
+  stays red, and closes it the first time the check passes again.
+
+# Why this exists: the nightly workflow was red on twelve of fourteen nights in
+# October 2026 — the deps job had flagged @azure/msal-node and then minimatch,
+# and the Monday mutation job had stopped starting after Stryker 5 — and none of
+# it reached anyone until a release tripped over the same problems. A red run on
+# a schedule notifies one person by email at most, and an email is easy to miss.
+# An open issue stays on the repository's front page until somebody fixes the check.
+#
+# One issue per check, not per run. Checks run on different crons (corpus and
+# deps nightly, scriptdom and mutation on Mondays), so a green corpus run on
+# Tuesday must not close the issue a red mutation run opened on Monday. A check
+# that did not run this time ("skipped") leaves its issue alone.
+
+inputs:
+  results:
+    description: '`toJSON(needs)` from the calling job.'
+    required: true
+  name:
+    description: >-
+      Optional. Collapse every result into one check with this name, for a
+      workflow whose jobs only mean something together (the release dry run).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        RESULTS: ${{ inputs.results }}
+        NAME: ${{ inputs.name }}
+        WORKFLOW: ${{ github.workflow }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        label=nightly-red
+
+        # --force makes this create-or-update, so the first run needs no setup by hand.
+        gh label create "$label" --force --color B60205 \
+          --description "A scheduled check is failing; closes itself when the check passes" >/dev/null
+
+        # A job that hit its timeout reports "cancelled", not "failure", and is just as broken.
+        if [ -n "$NAME" ]; then
+          verdict="$(jq -r '[.[].result]
+            | if any(. == "failure" or . == "cancelled") then "failure"
+              elif all(. == "skipped") then "skipped"
+              else "success" end' <<<"$RESULTS")"
+          checks="$NAME"$'\t'"$verdict"
+        else
+          checks="$(jq -r 'to_entries[] | "\(.key)\t\(.value.result)"' <<<"$RESULTS")"
+        fi
+
+        open="$(gh issue list --label "$label" --state open --limit 100 --json number,title)"
+
+        while IFS=$'\t' read -r check result; do
+          [ -n "$check" ] || continue
+          title="Scheduled check failing: $WORKFLOW / $check"
+          issue="$(jq -r --arg t "$title" '.[] | select(.title == $t) | .number' <<<"$open" | head -1)"
+
+          case "$result" in
+            failure|cancelled)
+              if [ -n "$issue" ]; then
+                gh issue comment "$issue" --body "Still failing: $RUN_URL"
+              else
+                gh issue create --title "$title" --label "$label" --body "$(cat <<EOF
+        The \`$check\` check in the \`$WORKFLOW\` workflow failed.
+
+        **Run:** $RUN_URL
+
+        This issue gets a comment on every further red run and closes itself the first time
+        \`$check\` passes. To have Claude Code triage and fix it, run \`/prepare-release\` in the
+        repository.
+        EOF
+                )"
+              fi
+              echo "$check: $result"
+              ;;
+            success)
+              if [ -n "$issue" ]; then
+                gh issue close "$issue" --comment "Passing again: $RUN_URL"
+              fi
+              echo "$check: passing"
+              ;;
+            *)
+              echo "$check: $result (did not run; issue left as it is)"
+              ;;
+          esac
+        done <<<"$checks"
