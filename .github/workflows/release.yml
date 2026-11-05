@@ -101,8 +101,18 @@ jobs:
           # replacement and the *last* x86_64 macOS image GitHub will offer —
           # it goes away in August 2027, after which osx-x64 has no builder and
           # this leg has to be dropped or moved to a self-hosted Intel Mac.
+          #
+          # macos-14 went the other way: on 5 November 2026 the runner started
+          # refusing jobs outright ("The configuration 'macos-14-arm64-us-default'
+          # is not supported"), and GitHub reports that as cancelled, not failed.
+          # It built v0.1.4 that morning. osx-arm64 now builds on macos-15, the
+          # same image generation as the Intel leg above. A newer image does not
+          # raise the binary's minimum macOS: the AOT compiler's targets pin it
+          # (AppleMinOSVersion, 12.0 in .NET 10), and the v0.1.4 binary built on
+          # macos-14 reads minos 12.0 against SDK 14.5. The weekly dry run is
+          # what notices the next retirement.
           - { rid: osx-x64,        os: macos-15-intel }
-          - { rid: osx-arm64,      os: macos-14 }
+          - { rid: osx-arm64,      os: macos-15 }
     env:
       VERSION: ${{ needs.version.outputs.version }}
       RID: ${{ matrix.rid }}
