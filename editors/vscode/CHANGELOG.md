@@ -6,8 +6,11 @@ No change to formatting. A file formatted by 0.1.3 comes out exactly the same.
 
 - Bundles maxdop 0.1.4, which parses with ScriptDom 180.140.0. Under the Fabric DW grammar the
   scalar AI functions can now carry an `ON ERROR` clause, and it comes through formatting untouched.
-- Build tooling only: the duplicate, older `@vscode/vsce` that `ovsx` pulled in is gone, and with it
-  a dependency under a security advisory. The extension's own code is unchanged.
+- The bundled maxdop binary is built with .NET SDK 10.0.403, so the runtime compiled into it is
+  10.0.14, which includes the fix for CVE-2026-111497.
+- Build tooling only: the duplicate, older `@vscode/vsce` that `ovsx` pulled in is gone, and
+  `minimatch` is overridden past a denial-of-service advisory. Both were security advisories against
+  packaging dependencies; the extension's own code is unchanged.
 
 ## 0.1.3
 

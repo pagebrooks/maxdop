@@ -20,11 +20,18 @@ crashed, nothing unstable.
 
 ## Toolchain
 
+- **.NET SDK 10.0.403.** The release binaries are Native AOT, so the .NET runtime is compiled into
+  them rather than installed beside them. The SDK pin moves from 10.0.302 to 10.0.403, which takes
+  the compiled-in runtime from 10.0.10 to 10.0.14 and with it the fix for CVE-2026-111497, an
+  out-of-bounds write in the runtime's Brotli decoder. maxdop never decodes Brotli, so it was not
+  reachable, but a binary that carries its own runtime should carry a patched one.
 - **VS Code extension.** `ovsx`, the tool that publishes the extension to Open VSX, pulled in its own
   older copy of `@vscode/vsce` beneath the one the extension already builds with, and with it a
   dependency under a security advisory. An npm override now resolves `ovsx` to the top-level `vsce`,
   which removes the duplicate tree and the advisory with it. This is build tooling: the extension's
-  own code is unchanged and it has no runtime npm dependencies.
+  own code is unchanged and it has no runtime npm dependencies. Separately, `minimatch`, which
+  `vsce` uses to apply `.vscodeignore`, is overridden to 11.0.1 or later for a denial-of-service
+  advisory (GHSA-g3hv-75wg-m249) that no `vsce` release has picked up yet.
 - **Test toolchain.** Mutation testing runs on Stryker.NET 5.0, and the test projects move to
   Microsoft.NET.Test.Sdk 18.11, coverlet 10.1 and xunit.runner.visualstudio 4.0.1. Pinned, as before,
   so a mutation score or a coverage number stays comparable with last week's.
