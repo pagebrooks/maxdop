@@ -647,6 +647,205 @@ jobs:
           git push
           echo "::notice::pushed maxdop ${{ needs.version.outputs.version }} to the tap"
 
+  winget:
+    # Opens the pull request to microsoft/winget-pkgs that `winget install --id pagebrooks.maxdop`
+    # reads from. Until this job existed that was a Komac run by hand after every tag, and it was
+    # forgotten twice: winget-pkgs stopped at 0.1.2 while 0.1.3 and 0.1.4 shipped everywhere else.
+    #
+    # Off until PUBLISH_WINGET is set, like the other publishers. What it produces is a pull request,
+    # not a publication: Microsoft's validation pipeline and a moderator still sit between it and
+    # users, so a bad manifest is a PR to close rather than a version to yank.
+    #
+    # Generate, prove, then submit those exact files. `komac update --dry-run` writes the manifests,
+    # deriving each installer block from the release's own archives with the previous version as the
+    # template. They are then installed on this machine and run, which is the one check schema
+    # validation cannot make (see winget-manifest.yml: a wrong NestedInstallerFiles path installs
+    # cleanly and leaves no working command). Only then does `komac submit` send the same directory.
+    #
+    # Windows because winget is the only thing that can install a manifest. Komac runs anywhere.
+    #
+    # WINGET_PAT has to be a *classic* token with the public_repo scope. Komac pushes a branch to the
+    # token owner's fork of winget-pkgs and opens the PR from there, and a fine-grained token cannot
+    # open a pull request against a repository its owner does not control.
+    name: winget
+    needs: [version, release]
+    if: ${{ needs.version.outputs.release == 'true' && vars.PUBLISH_WINGET == 'true' }}
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PACKAGE: pagebrooks.maxdop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # A re-run of a tag that already reached winget-pkgs, or is waiting in review there, should be
+      # a no-op rather than a second PR or a red job. Komac has its own duplicate-PR check, but it
+      # asks interactively, and nothing here can answer.
+      - name: Already submitted?
+        id: existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          path="manifests/p/${PACKAGE%%.*}/${PACKAGE#*.}/$VERSION"
+          if gh api "repos/microsoft/winget-pkgs/contents/$path" --silent 2>/dev/null; then
+            echo "::notice::$PACKAGE $VERSION is already in winget-pkgs"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          open="$(gh pr list --repo microsoft/winget-pkgs --state open \
+            --search "\"$PACKAGE version $VERSION\" in:title" --json url --jq '.[].url')"
+          if [ -n "$open" ]; then
+            echo "::notice::$PACKAGE $VERSION is already waiting for review: $open"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      # From Komac's GitHub release and checked against its SHA256SUMS, at the version mise.toml
+      # pins, so CI submits with the same Komac a maintainer would run locally.
+      - name: Install Komac
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^ *"github:russellbanks\/Komac" *= *"\(.*\)"/\1/p' mise.toml | head -1)"
+          if [ -z "$version" ]; then
+            echo "::error file=mise.toml::no Komac pin found — the CI Komac is read from this file"
+            exit 1
+          fi
+
+          exe="komac-$version-x86_64-pc-windows-msvc.exe"
+          mkdir -p "$RUNNER_TEMP/komac"
+          cd "$RUNNER_TEMP/komac"
+          gh release download "v$version" --repo russellbanks/Komac --pattern "$exe" --pattern SHA256SUMS
+          grep -F " *$exe" SHA256SUMS | sha256sum -c -
+          mv "$exe" komac.exe
+          echo "$RUNNER_TEMP/komac" >> "$GITHUB_PATH"
+
+      - name: Generate the manifests
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "::error::PUBLISH_WINGET is set but the WINGET_PAT secret is not"
+            exit 1
+          fi
+
+          base="$REPO_URL/releases/download/v$VERSION"
+          komac update "$PACKAGE" \
+            --version "$VERSION" \
+            --urls "$base/maxdop-$VERSION-win-x64.zip" "$base/maxdop-$VERSION-win-arm64.zip" \
+            --release-notes-url "$REPO_URL/releases/tag/v$VERSION" \
+            --dry-run \
+            --output generated < /dev/null
+
+          dir="generated/manifests/p/${PACKAGE%%.*}/${PACKAGE#*.}/$VERSION"
+          test -f "$dir/$PACKAGE.installer.yaml"
+          echo "MANIFESTS=$dir" >> "$GITHUB_ENV"
+
+      # Komac hashed the archives it downloaded. The release job already verified SHA256SUMS against
+      # the same archives, so the two must agree; if they do not, something between the release and
+      # this job changed the bytes, and that is not something to submit.
+      - name: Hashes match the release
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "v$VERSION" --pattern SHA256SUMS --dir "$RUNNER_TEMP"
+
+          for arch in x64 arm64; do
+            zip="maxdop-$VERSION-win-$arch.zip"
+            want="$(awk -v f="*$zip" '$2 == f || $2 == substr(f, 2) { print toupper($1) }' "$RUNNER_TEMP/SHA256SUMS")"
+            # Komac writes CRLF, which would otherwise stop the `$` anchor matching anything.
+            got="$(tr -d '\r' < "$MANIFESTS/$PACKAGE.installer.yaml" \
+              | grep -A1 "InstallerUrl: .*/$zip\$" \
+              | sed -n 's/^ *InstallerSha256: *//p')"
+            if [ -z "$want" ] || [ "$want" != "$got" ]; then
+              echo "::error::$zip: SHA256SUMS says '${want:-missing}', the manifest says '${got:-missing}'"
+              exit 1
+            fi
+            echo "$zip $got"
+          done
+
+      - name: Validate the manifests
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: pwsh
+        run: |
+          winget validate --manifest $env:MANIFESTS
+          if ($LASTEXITCODE -ne 0) { throw "winget validate failed" }
+
+      - name: Install from the generated manifests
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: pwsh
+        run: |
+          # Off by default, because installing from a manifest bypasses the signed repository.
+          winget settings --enable LocalManifestFiles
+
+          winget install --manifest $env:MANIFESTS `
+            --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget install failed with $LASTEXITCODE" }
+
+      - name: The installed command runs and formats
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: pwsh
+        run: |
+          # The shim directory is added to PATH for new processes only; see winget-manifest.yml.
+          $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
+                      [Environment]::GetEnvironmentVariable('PATH', 'User')
+
+          # -join because --version prints two lines; see winget-manifest.yml for why that matters.
+          $version = (maxdop --version) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "maxdop exited $LASTEXITCODE" }
+          Write-Host $version
+          if ($version -notmatch [regex]::Escape($env:VERSION)) {
+            throw "the manifests are for $env:VERSION, the installed binary reports '$version'"
+          }
+
+          Set-Content -Path query.sql -Value 'select a,b from dbo.t where a=1'
+          $out = (maxdop query.sql) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "maxdop exited $LASTEXITCODE" }
+          if ($out -notmatch '^SELECT\b') { throw "expected formatted SQL, got: $out" }
+
+      - name: Uninstall cleanly
+        if: ${{ always() && steps.existing.outputs.skip != 'true' && env.MANIFESTS != '' }}
+        shell: pwsh
+        run: |
+          # By manifest, not by --id: the package came from a local manifest and is in no source.
+          winget uninstall --manifest $env:MANIFESTS --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "winget uninstall failed with $LASTEXITCODE" }
+
+      - name: Submit to winget-pkgs
+        if: ${{ steps.existing.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          set -euo pipefail
+          komac submit --yes "$MANIFESTS" < /dev/null
+          echo "::notice::submitted $PACKAGE $VERSION to microsoft/winget-pkgs"
+
+      # Kept whether or not the submission went through, so a rejected or failed run leaves the exact
+      # files behind for `komac submit` by hand.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ always() && steps.existing.outputs.skip != 'true' }}
+        with:
+          name: winget-manifests
+          path: generated/
+          if-no-files-found: ignore
+          retention-days: 30
+
   report:
     # The weekly dry run reports like the nightly checks do: one nightly-red issue while it fails,
     # closed by the first green run. Only the schedule and manual runs on main report; a tag is
