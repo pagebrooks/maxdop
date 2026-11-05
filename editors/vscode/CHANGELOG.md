@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+No change to formatting. A file formatted by 0.1.3 comes out exactly the same.
+
+- Bundles maxdop 0.1.4, which parses with ScriptDom 180.140.0. Under the Fabric DW grammar the
+  scalar AI functions can now carry an `ON ERROR` clause, and it comes through formatting untouched.
+- Build tooling only: the duplicate, older `@vscode/vsce` that `ovsx` pulled in is gone, and with it
+  a dependency under a security advisory. The extension's own code is unchanged.
+
 ## 0.1.3
 
 No change to formatting. A file formatted by 0.1.2 comes out exactly the same.
