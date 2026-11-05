@@ -7,6 +7,30 @@ on:
   # native builds can be exercised without cutting a version.
   workflow_dispatch:
 
+  # A weekly dry run, because the only reliable predictor of a release build passing is the release
+  # build. Per-push CI publishes AOT on ubuntu-latest only; the tag builds on Rocky 8 containers,
+  # macOS and Windows ARM. v0.1.4's first tag failed NU1903 on four legs thirteen minutes after the
+  # same SDK passed CI's AOT job, and the macos-13 retirement left a leg queued forever. Both are
+  # things a Sunday run finds before a tag does. A red run opens a nightly-red issue (see `report`).
+  schedule:
+    - cron: '17 6 * * 0'
+
+  # The same dry run on the pull requests that change what the release pipeline builds with and that
+  # per-push CI does not exercise: the SDK pin, build properties, the shared setup actions, the
+  # shipping project, the wheel and VSIX packaging, and this file. pyproject.toml is on the list
+  # because a release-prep PR always touches it, so every release is dry-run before it is tagged.
+  pull_request:
+    paths:
+      - mise.toml
+      - Directory.Build.props
+      - src/**/*.csproj
+      - pyproject.toml
+      - packaging/pypi/**
+      - editors/vscode/package.json
+      - editors/vscode/package-lock.json
+      - .github/actions/**
+      - .github/workflows/release.yml
+
 permissions:
   contents: read
 
@@ -622,6 +646,30 @@ jobs:
           git commit -m "maxdop: update to ${{ needs.version.outputs.version }}"
           git push
           echo "::notice::pushed maxdop ${{ needs.version.outputs.version }} to the tap"
+
+  report:
+    # The weekly dry run reports like the nightly checks do: one nightly-red issue while it fails,
+    # closed by the first green run. Only the schedule and manual runs on main report; a tag is
+    # watched by whoever pushed it, and a PR shows its own checks.
+    name: report
+    needs: [version, test, build, vsix, wheels]
+    if: >-
+      always()
+      && (github.event_name == 'schedule'
+          || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/report-scheduled
+        with:
+          results: ${{ toJSON(needs) }}
+          name: dry run
 
   pypi:
     # Off until someone sets the PUBLISH_PYPI repository variable, for the same
