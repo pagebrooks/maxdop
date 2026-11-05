@@ -1,9 +1,9 @@
 name: Pinned .NET SDK
 description: >-
-  Installs the exact SDK version pinned in mise.toml. The pin lives in one file
-  so a CI build and a developer's `mise exec -- dotnet build` cannot drift apart;
-  adding a global.json would give the same result by duplicating the number,
-  which is the thing worth avoiding.
+  Installs the exact SDK version pinned in mise.toml and makes it the one that
+  runs. The pin lives in one file so a CI build and a developer's
+  `mise exec -- dotnet build` cannot drift apart; a committed global.json would
+  duplicate the number, so this action writes one at run time instead.
 
 runs:
   using: composite
@@ -23,3 +23,30 @@ runs:
     - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
       with:
         dotnet-version: ${{ steps.pin.outputs.version }}
+
+    # Installing the pinned SDK does not make it the one that runs. Without a
+    # global.json the muxer picks the newest SDK on the machine, and the macOS
+    # and Windows images ship newer ones preinstalled. The v0.1.4 tag build
+    # showed it: pinned to 10.0.302 (runtime 10.0.10), osx-arm64 resolved
+    # ILCompiler 10.0.11 from an image SDK, so each OS was compiling a
+    # different runtime into its AOT binary. rollForward "disable" makes a
+    # missing pin a hard error rather than a silent substitution.
+    - name: Enforce the pinned SDK
+      shell: bash
+      env:
+        PINNED: ${{ steps.pin.outputs.version }}
+      run: |
+        set -euo pipefail
+        printf '{\n  "sdk": {\n    "version": "%s",\n    "rollForward": "disable"\n  }\n}\n' \
+          "$PINNED" > "$GITHUB_WORKSPACE/global.json"
+        cd "$GITHUB_WORKSPACE"
+        actual="$(dotnet --version 2>&1)" || {
+          echo "$actual"
+          echo "::error file=mise.toml::mise.toml pins SDK $PINNED, and dotnet cannot find it"
+          exit 1
+        }
+        if [ "$actual" != "$PINNED" ]; then
+          echo "::error file=mise.toml::dotnet resolved SDK $actual, but mise.toml pins $PINNED"
+          exit 1
+        fi
+        echo "Resolved SDK: $actual"

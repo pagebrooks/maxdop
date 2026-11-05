@@ -23,6 +23,9 @@ coverage/
 *.coverage
 *.trx
 
+## .NET SDK: pinned in mise.toml; CI writes global.json from it (.github/actions/dotnet)
+/global.json
+
 ## NuGet
 *.nupkg
 *.snupkg
