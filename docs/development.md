@@ -3,7 +3,7 @@
 ## Building
 
 ```sh
-mise install                      # .NET SDK 10.0.302, Node 22
+mise install                      # .NET SDK 10.0.403, Node 22
 mise exec -- dotnet build
 mise exec -- dotnet test
 
