@@ -44,6 +44,31 @@ Exclusions apply to every path maxdop is given — a directory walk, a `--files-
 named directly on the command line alike. One rule is easier to reason about than three; naming an
 excluded file explicitly says so on stderr rather than doing nothing silently.
 
+## Leaving one statement alone
+
+`exclude` costs a whole file its formatting. To protect a single statement, like a hand-aligned
+`VALUES` grid or a `CASE` ladder laid out in columns, put `-- maxdop-ignore` on its own line above it:
+
+```sql
+-- maxdop-ignore: rate card layout
+INSERT INTO dbo.Rates (Code, Rate, Description)
+VALUES ('A',  0.10, 'standard'),
+       ('BB', 1.25, 'premium');
+```
+
+The next statement is left exactly as written, keywords included, and everything else in the file is
+formatted as usual. Inside a block, the statement moves to the block's indent as a unit and nothing
+inside it moves.
+
+- **The next statement only.** A directive above a `CREATE PROCEDURE` covers the whole procedure,
+  and one above an `INSERT` inside it covers that `INSERT`. There is no start/end block form.
+- **Own line only.** `SELECT 1; -- maxdop-ignore` is a comment on that line and does not reach the
+  statement after it.
+- **Spelling.** `--` or `/* */`, any case, and anything after the name as long as a space or a colon
+  separates it, so a reason can go with it. `maxdop-ignored` and a comment that merely mentions the
+  directive are ordinary comments.
+- **Other comments** may sit between the directive and the statement.
+
 ## Only the files that changed
 
 maxdop has no dependency on git, and does not want one: it would mean a `git` binary in every CI
