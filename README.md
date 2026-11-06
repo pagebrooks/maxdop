@@ -301,6 +301,9 @@ keeps every character you wrote.
 There are no editor-level formatting settings on purpose. A repo formats the same way whoever opens
 it.
 
+To leave one statement exactly as written, put `-- maxdop-ignore` on its own line above it. See
+[docs/cli.md](docs/cli.md#leaving-one-statement-alone).
+
 ## Documentation
 
 | | |

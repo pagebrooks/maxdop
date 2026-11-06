@@ -217,6 +217,13 @@ public sealed partial class SqlPrinter
         {
             body = Passthrough(node);
         }
+        else if (node is TSqlStatement && HasIgnoreDirective(node))
+        {
+            // The author's escape hatch, structurally the same as the depth guard above: stop
+            // descending and emit the source. Everything downstream — terminators, comments, the
+            // round-trip and comment-survival gates — already handles a passed-through statement.
+            body = Passthrough(node, keepLayout: true);
+        }
         else
         {
             _depth++;
@@ -1164,6 +1171,7 @@ public sealed partial class SqlPrinter
     /// </remarks>
     private Doc Passthrough(
         TSqlFragment node,
+        bool keepLayout = false,
         [System.Runtime.CompilerServices.CallerMemberName] string guard = "",
         [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
@@ -1193,7 +1201,105 @@ public sealed partial class SqlPrinter
         }
 
         var text = SqlText.Slice(_tokens, first, last);
+        if (keepLayout)
+        {
+            return KeptLayout(first, last, text);
+        }
+
         return CanReindent(first, last) ? Reindented(text) : Doc.Verbatim(text);
+    }
+
+    // Whether an own-line `-- maxdop-ignore` sits in the run of comments and whitespace directly above
+    // the statement.
+    //
+    // Read from the token stream rather than from the statement's attached leading comments, because
+    // attachment answers "who owns this comment", not "what is it written above". The first statement
+    // of a batch shares its first token with the batch, so a comment above it can be attached to the
+    // batch, and comments ahead of a statement can be hoisted to a keyword or separator before Print
+    // ever sees them. Neither changes what the author was pointing at.
+    //
+    // Own-line only. `SELECT 1; -- maxdop-ignore` is a note about the line it ends; letting it reach
+    // the next statement would make the directive's scope depend on where a line happens to break.
+    private bool HasIgnoreDirective(TSqlFragment node)
+    {
+        for (var i = EffectiveFirstToken(node) - 1; i >= 0 && _tokens[i].IsTrivia(); i--)
+        {
+            if (_tokens[i].IsComment()
+                && CommentAt(i) is { Placement: CommentPlacement.OwnLine } comment
+                && IgnoreDirective.IsDirective(comment.Text))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Layout for a statement the author asked to keep: every line exactly as written, relative to the
+    // statement's own first line.
+    //
+    // Neither existing passthrough layout does that. Reindented strips the continuation lines' common
+    // indent, which pulls a `VALUES` grid indented under its `INSERT` back to the margin. Verbatim
+    // leaves continuation lines at their source columns while the first line takes the printer's
+    // indent, so inside a block re-indented from two spaces to four the grid shears away from its
+    // first line. Here the indent of the line the statement starts on is the baseline: it is removed
+    // from every continuation line and the printer's own indent put back, so the whole statement moves
+    // as one block and nothing inside it moves at all. At the top level that is the source, byte for
+    // byte.
+    //
+    // Falls back to Verbatim when a continuation line sits left of the baseline, which cannot be
+    // shifted uniformly, or when CanReindent says a newline lives inside a string or block comment.
+    private Doc KeptLayout(int first, int last, string text)
+    {
+        if (!CanReindent(first, last))
+        {
+            return Doc.Verbatim(text);
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        if (lines.Length == 1)
+        {
+            return Doc.Text(lines[0]);
+        }
+
+        var baseline = SourceLineIndent(first);
+        for (var i = 1; i < lines.Length; i++)
+        {
+            if (lines[i].Trim().Length > 0 && !lines[i].StartsWith(baseline, StringComparison.Ordinal))
+            {
+                return Doc.Verbatim(text);
+            }
+        }
+
+        var parts = new List<Doc>(lines.Length * 2) { Doc.Text(lines[0].TrimEnd()) };
+        for (var i = 1; i < lines.Length; i++)
+        {
+            parts.Add(Doc.HardLine);
+            parts.Add(Doc.Text(lines[i].Trim().Length == 0 ? string.Empty : lines[i][baseline.Length..].TrimEnd()));
+        }
+
+        return Doc.Concat(parts);
+    }
+
+    // The leading whitespace of the source line the token at tokenIndex sits on.
+    private string SourceLineIndent(int tokenIndex)
+    {
+        var line = new System.Text.StringBuilder();
+        for (var i = tokenIndex - 1; i >= 0; i--)
+        {
+            var text = _tokens[i].Text ?? string.Empty;
+            var newline = text.LastIndexOf('\n');
+            if (newline >= 0)
+            {
+                line.Insert(0, text[(newline + 1)..]);
+                break;
+            }
+
+            line.Insert(0, text);
+        }
+
+        var value = line.ToString();
+        return value[..(value.Length - value.TrimStart().Length)];
     }
 
     /// <summary>
